@@ -1,0 +1,20 @@
+# OS / IDE
+.DS_Store
+.idea/
+*.iml
+
+# Local Flutter SDK copy — do not publish
+.tools/
+
+# Flutter / Dart
+**/build/
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/.packages
+**/coverage/
+*.symbols
+*.map.json
+
+# Secrets
+**/.env
+!**/.env.example
