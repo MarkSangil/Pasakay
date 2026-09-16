@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/driver_form_validators.dart';
 import '../../models/admin_models.dart';
 import '../../widgets/admin_widgets.dart';
 
@@ -38,7 +40,11 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
     );
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() {
+    setState(() {
+      _future = _load();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +117,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
                         for (final driver in drivers)
                           _DriverRow(
                             driver: driver,
-                            onEdit: () => _edit(page, existing: driver),
+                            onOpen: () => context.go('/drivers/${driver.id}'),
                             onVerify: () => _verify(driver),
                             onStatus: () => _setStatus(driver),
                             onReset: () => _resetPassword(driver),
@@ -126,24 +132,25 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
     );
   }
 
-  Future<void> _edit(_DriverPage page, {DriverRecord? existing}) async {
+  Future<void> _edit(_DriverPage page) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => _DriverFormDialog(page: page, existing: existing),
+      builder: (context) => _DriverFormDialog(page: page),
     );
     if (saved == true) _reload();
   }
 
   Future<void> _verify(DriverRecord driver) async {
-    final verified = await showDialog<bool>(
+    final result = await showDialog<_VerifyResult>(
       context: context,
       builder: (context) => _VerifyDialog(driver: driver),
     );
-    if (verified == null) return;
+    if (result == null) return;
     try {
       await ref.read(adminRepositoryProvider).verifyLicense(
             driver.id,
-            verified: verified,
+            verified: result.verified,
+            todaNumber: result.todaNumber,
           );
       _reload();
     } catch (error) {
@@ -222,7 +229,7 @@ class _DriverPage {
 class _DriverRow extends StatelessWidget {
   const _DriverRow({
     required this.driver,
-    required this.onEdit,
+    required this.onOpen,
     required this.onVerify,
     required this.onStatus,
     required this.onReset,
@@ -230,7 +237,7 @@ class _DriverRow extends StatelessWidget {
   });
 
   final DriverRecord driver;
-  final VoidCallback onEdit;
+  final VoidCallback onOpen;
   final VoidCallback onVerify;
   final VoidCallback onStatus;
   final VoidCallback onReset;
@@ -247,15 +254,27 @@ class _DriverRow extends StatelessWidget {
         children: [
           Expanded(
             flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(driver.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text(
-                  '${driver.contactNumber} · ${driver.plateNumber}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                ),
-              ],
+            child: InkWell(
+              onTap: onOpen,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    driver.fullName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  Text(
+                    '${driver.contactNumber} · ${driver.plateNumber}',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -277,7 +296,7 @@ class _DriverRow extends StatelessWidget {
             child: Wrap(
               spacing: 4,
               children: [
-                TextButton(onPressed: onEdit, child: const Text('Edit')),
+                TextButton(onPressed: onOpen, child: const Text('Open')),
                 TextButton(onPressed: onVerify, child: const Text('Verify')),
                 TextButton(onPressed: onStatus, child: const Text('Status')),
                 PopupMenuButton<String>(
@@ -300,25 +319,25 @@ class _DriverRow extends StatelessWidget {
 }
 
 class _DriverFormDialog extends ConsumerStatefulWidget {
-  const _DriverFormDialog({required this.page, this.existing});
+  const _DriverFormDialog({required this.page});
 
   final _DriverPage page;
-  final DriverRecord? existing;
 
   @override
   ConsumerState<_DriverFormDialog> createState() => _DriverFormDialogState();
 }
 
 class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
-  late final _name = TextEditingController(text: widget.existing?.fullName);
-  late final _contact = TextEditingController(text: widget.existing?.contactNumber);
-  late final _license = TextEditingController(text: widget.existing?.licenseNumber);
-  late final _plate = TextEditingController(text: widget.existing?.plateNumber);
-  late final _toda = TextEditingController(text: widget.existing?.todaNumber);
-  late final _username = TextEditingController(text: widget.existing?.username);
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _contact = TextEditingController();
+  final _license = TextEditingController();
+  final _plate = TextEditingController();
+  final _toda = TextEditingController();
+  final _username = TextEditingController();
   final _password = TextEditingController();
-  late String? _terminalId = widget.existing?.terminalId ?? widget.page.terminals.first.id;
-  late String? _shiftId = widget.existing?.shiftId ?? widget.page.shifts.first.id;
+  late String? _terminalId = widget.page.terminals.first.id;
+  late String? _shiftId = widget.page.shifts.first.id;
   bool _saving = false;
 
   @override
@@ -334,34 +353,20 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
   }
 
   Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      final repo = ref.read(adminRepositoryProvider);
-      if (widget.existing == null) {
-        await repo.createDriver(
-          fullName: _name.text.trim(),
-          contactNumber: _contact.text.trim(),
-          licenseNumber: _license.text.trim(),
-          plateNumber: _plate.text.trim(),
-          username: _username.text.trim(),
-          password: _password.text,
-          terminalId: _terminalId!,
-          shiftId: _shiftId!,
-          todaNumber: _toda.text.trim(),
-        );
-      } else {
-        await repo.updateDriver(
-          driverId: widget.existing!.id,
-          fullName: _name.text.trim(),
-          contactNumber: _contact.text.trim(),
-          licenseNumber: _license.text.trim(),
-          plateNumber: _plate.text.trim(),
-          username: _username.text.trim(),
-          terminalId: _terminalId!,
-          shiftId: _shiftId!,
-          todaNumber: _toda.text.trim(),
-        );
-      }
+      await ref.read(adminRepositoryProvider).createDriver(
+            fullName: _name.text.trim(),
+            contactNumber: _contact.text.trim(),
+            licenseNumber: _license.text.trim(),
+            plateNumber: _plate.text.trim(),
+            username: _username.text.trim(),
+            password: _password.text,
+            terminalId: _terminalId!,
+            shiftId: _shiftId!,
+            todaNumber: _toda.text.trim(),
+          );
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) showError(context, error);
@@ -372,76 +377,90 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final editing = widget.existing != null;
     return AlertDialog(
-      title: Text(editing ? 'Edit driver' : 'Add driver'),
+      title: const Text('Add driver'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name')),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _contact,
-                decoration: const InputDecoration(labelText: 'Contact number'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _username,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  helperText: 'Leave blank to use the contact number',
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _name,
+                  decoration: const InputDecoration(labelText: 'Full name'),
+                  validator: DriverFormValidators.requiredName,
                 ),
-              ),
-              if (!editing) ...[
                 const SizedBox(height: 10),
-                TextField(
+                TextFormField(
+                  controller: _contact,
+                  decoration: const InputDecoration(labelText: 'Contact number'),
+                  validator: DriverFormValidators.contactNumber,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _username,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    helperText: 'Leave blank to use the contact number',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
                   controller: _password,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: 'Temporary password'),
+                  validator: (v) =>
+                      DriverFormValidators.password(v, required: true),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _license,
+                  decoration: const InputDecoration(labelText: 'License number'),
+                  validator: DriverFormValidators.licenseNumber,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _plate,
+                  decoration: const InputDecoration(labelText: 'Plate number'),
+                  validator: DriverFormValidators.plateNumber,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _toda,
+                  decoration: const InputDecoration(labelText: 'SSLTODA No. (optional)'),
+                  validator: (v) => DriverFormValidators.ssltodaNumber(v),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _terminalId,
+                  decoration: const InputDecoration(labelText: 'Terminal'),
+                  items: [
+                    for (final terminal in widget.page.terminals)
+                      DropdownMenuItem(value: terminal.id, child: Text(terminal.name)),
+                  ],
+                  onChanged: (value) => setState(() => _terminalId = value),
+                  validator: (v) =>
+                      DriverFormValidators.requiredSelection(v, 'terminal'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _shiftId,
+                  decoration: const InputDecoration(labelText: 'Shift'),
+                  items: [
+                    for (final shift in widget.page.shifts)
+                      DropdownMenuItem(
+                        value: shift.id,
+                        child: Text('${shift.label} (${shift.window})'),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _shiftId = value),
+                  validator: (v) =>
+                      DriverFormValidators.requiredSelection(v, 'shift'),
                 ),
               ],
-              const SizedBox(height: 10),
-              TextField(
-                controller: _license,
-                decoration: const InputDecoration(
-                  labelText: 'License number',
-                  helperText: 'Entered as given. Not checked against a government database.',
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(controller: _plate, decoration: const InputDecoration(labelText: 'Plate number')),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _toda,
-                decoration: const InputDecoration(labelText: 'TODA number (optional)'),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _terminalId,
-                decoration: const InputDecoration(labelText: 'Terminal'),
-                items: [
-                  for (final terminal in widget.page.terminals)
-                    DropdownMenuItem(value: terminal.id, child: Text(terminal.name)),
-                ],
-                onChanged: (value) => setState(() => _terminalId = value),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _shiftId,
-                decoration: const InputDecoration(labelText: 'Shift'),
-                items: [
-                  for (final shift in widget.page.shifts)
-                    DropdownMenuItem(
-                      value: shift.id,
-                      child: Text('${shift.label} (${shift.window})'),
-                    ),
-                ],
-                onChanged: (value) => setState(() => _shiftId = value),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -449,11 +468,18 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           onPressed: _saving ? null : _save,
-          child: Text(editing ? 'Save' : 'Create pending account'),
+          child: Text(_saving ? 'Saving...' : 'Create pending account'),
         ),
       ],
     );
   }
+}
+
+class _VerifyResult {
+  const _VerifyResult({required this.verified, this.todaNumber});
+
+  final bool verified;
+  final String? todaNumber;
 }
 
 class _VerifyDialog extends StatefulWidget {
@@ -467,6 +493,24 @@ class _VerifyDialog extends StatefulWidget {
 
 class _VerifyDialogState extends State<_VerifyDialog> {
   bool _checked = false;
+  late final _toda = TextEditingController(text: widget.driver.todaNumber ?? '');
+  String? _todaError;
+
+  @override
+  void dispose() {
+    _toda.dispose();
+    super.dispose();
+  }
+
+  void _markVerified() {
+    final error = DriverFormValidators.ssltodaNumber(_toda.text, required: true);
+    setState(() => _todaError = error);
+    if (!_checked || error != null) return;
+    Navigator.pop(
+      context,
+      _VerifyResult(verified: true, todaNumber: _toda.text.trim()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -478,13 +522,29 @@ class _VerifyDialogState extends State<_VerifyDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.driver.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              widget.driver.fullName,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 12),
             SelectableText(
               widget.driver.licenseNumber,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _toda,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'SSLTODA No.',
+                helperText: 'Required when marking this driver as verified.',
+                errorText: _todaError,
+              ),
+              onChanged: (_) {
+                if (_todaError != null) setState(() => _todaError = null);
+              },
+            ),
+            const SizedBox(height: 8),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: _checked,
@@ -496,11 +556,14 @@ class _VerifyDialogState extends State<_VerifyDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => Navigator.pop(
+            context,
+            const _VerifyResult(verified: false),
+          ),
           child: const Text('Clear verification'),
         ),
         FilledButton(
-          onPressed: _checked ? () => Navigator.pop(context, true) : null,
+          onPressed: _checked ? _markVerified : null,
           child: const Text('Mark verified'),
         ),
       ],

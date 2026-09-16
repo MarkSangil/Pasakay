@@ -60,9 +60,18 @@ class Overview {
     this.shifts = 0,
     this.reviewsVisible = 0,
     this.reviewsHidden = 0,
+    this.requestsPending = 0,
+    this.requestsTotal = 0,
+    this.bookingsBooked = 0,
+    this.bookingsCompleted = 0,
+    this.bookingsFlagged = 0,
+    this.bookingsCancelled = 0,
+    this.bookingsTotal = 0,
+    this.reviewReportsOpen = 0,
     this.crashLogs = 0,
     this.deviceLogs = 0,
     this.privacyOpen = 0,
+    this.generatedAt,
   });
 
   final int driversTotal;
@@ -75,12 +84,33 @@ class Overview {
   final int shifts;
   final int reviewsVisible;
   final int reviewsHidden;
+  final int requestsPending;
+  final int requestsTotal;
+  final int bookingsBooked;
+  final int bookingsCompleted;
+  final int bookingsFlagged;
+  final int bookingsCancelled;
+  final int bookingsTotal;
+  final int reviewReportsOpen;
   final int crashLogs;
   final int deviceLogs;
   final int privacyOpen;
+  final DateTime? generatedAt;
 
   factory Overview.fromJson(Map<String, dynamic> json) {
-    int n(String key) => (json[key] as num?)?.toInt() ?? 0;
+    int n(String key) {
+      final v = json[key];
+      if (v == null) return 0;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString()) ?? 0;
+    }
+
+    DateTime? t(String key) {
+      final v = json[key];
+      if (v is String && v.isNotEmpty) return DateTime.tryParse(v);
+      return null;
+    }
+
     return Overview(
       driversTotal: n('drivers_total'),
       driversPending: n('drivers_pending'),
@@ -92,9 +122,18 @@ class Overview {
       shifts: n('shifts'),
       reviewsVisible: n('reviews_visible'),
       reviewsHidden: n('reviews_hidden'),
+      requestsPending: n('requests_pending'),
+      requestsTotal: n('requests_total'),
+      bookingsBooked: n('bookings_booked'),
+      bookingsCompleted: n('bookings_completed'),
+      bookingsFlagged: n('bookings_flagged'),
+      bookingsCancelled: n('bookings_cancelled'),
+      bookingsTotal: n('bookings_total'),
+      reviewReportsOpen: n('review_reports_open'),
       crashLogs: n('crash_logs'),
       deviceLogs: n('device_logs'),
       privacyOpen: n('privacy_open'),
+      generatedAt: t('generated_at'),
     );
   }
 }
@@ -273,40 +312,58 @@ class ReviewRecord {
     required this.rating,
     required this.createdAt,
     required this.isHidden,
+    this.bookingId,
     this.content,
     this.commuterName,
     this.driverName,
+    this.driverPlate,
     this.moderationNote,
   });
 
   final String id;
   final String commuterId;
   final String driverId;
+  final String? bookingId;
   final int rating;
   final String? content;
   final DateTime createdAt;
   final bool isHidden;
   final String? commuterName;
   final String? driverName;
+  final String? driverPlate;
   final String? moderationNote;
 
   factory ReviewRecord.fromJson(Map<String, dynamic> json) {
     String? commuterName;
     String? driverName;
+    String? driverPlate;
     final commuter = json['commuter'];
     final driver = json['driver'];
-    if (commuter is Map) commuterName = commuter['full_name'] as String?;
-    if (driver is Map) driverName = driver['full_name'] as String?;
+    if (commuter is Map) {
+      commuterName = (commuter['full_name'] ?? json['commuter_name']) as String?;
+    } else {
+      commuterName = json['commuter_name'] as String?;
+    }
+    if (driver is Map) {
+      driverName = (driver['full_name'] ?? json['driver_name']) as String?;
+      driverPlate = (driver['plate_number'] ?? json['driver_plate']) as String?;
+    } else {
+      driverName = json['driver_name'] as String?;
+      driverPlate = json['driver_plate'] as String?;
+    }
+    final createdRaw = json['date_created'] ?? json['created_at'];
     return ReviewRecord(
-      id: json['review_id'] as String,
+      id: (json['review_id'] ?? json['id']) as String,
       commuterId: json['commuter_id'] as String,
       driverId: json['driver_id'] as String,
+      bookingId: json['booking_id'] as String?,
       rating: (json['rating'] as num).toInt(),
       content: json['content'] as String?,
-      createdAt: DateTime.parse(json['date_created'].toString()),
+      createdAt: DateTime.parse(createdRaw.toString()),
       isHidden: json['is_hidden'] as bool? ?? false,
       commuterName: commuterName,
       driverName: driverName,
+      driverPlate: driverPlate,
       moderationNote: json['moderation_note'] as String?,
     );
   }
@@ -365,6 +422,129 @@ class DeviceLogRecord {
   }
 }
 
+class FlaggedBookingRecord {
+  const FlaggedBookingRecord({
+    required this.id,
+    required this.requestId,
+    required this.commuterId,
+    required this.driverId,
+    required this.status,
+    required this.confirmedAt,
+    required this.flaggedAt,
+    this.flagReason,
+    this.flagDetails,
+    this.commuterName,
+    this.driverName,
+    this.passengerReportedAt,
+  });
+
+  final String id;
+  final String requestId;
+  final String commuterId;
+  final String driverId;
+  final String status;
+  final DateTime confirmedAt;
+  final DateTime flaggedAt;
+  final String? flagReason;
+  final String? flagDetails;
+  final String? commuterName;
+  final String? driverName;
+  final DateTime? passengerReportedAt;
+
+  bool get isPassengerReport => passengerReportedAt != null;
+
+  factory FlaggedBookingRecord.fromJson(Map<String, dynamic> json) {
+    String? commuterName;
+    String? driverName;
+    final commuter = json['commuter'];
+    final driver = json['driver'];
+    if (commuter is Map) commuterName = commuter['full_name'] as String?;
+    if (driver is Map) driverName = driver['full_name'] as String?;
+    final passengerReportedAt = json['passenger_reported_at'] == null
+        ? null
+        : DateTime.parse(json['passenger_reported_at'].toString());
+    return FlaggedBookingRecord(
+      id: json['booking_id'] as String,
+      requestId: json['request_id'] as String,
+      commuterId: json['commuter_id'] as String,
+      driverId: json['driver_id'] as String,
+      status: json['status'] as String? ?? 'FLAGGED',
+      confirmedAt: DateTime.parse(json['confirmed_at'].toString()),
+      flaggedAt: json['flagged_at'] == null
+          ? (passengerReportedAt ??
+              DateTime.parse(json['confirmed_at'].toString()))
+          : DateTime.parse(json['flagged_at'].toString()),
+      flagReason: json['flag_reason'] as String?,
+      flagDetails: json['flag_details'] as String?,
+      commuterName: commuterName ?? json['passenger_name'] as String?,
+      driverName: driverName,
+      passengerReportedAt: passengerReportedAt,
+    );
+  }
+}
+
+class ReviewReportRecord {
+  const ReviewReportRecord({
+    required this.id,
+    required this.reviewId,
+    required this.driverId,
+    required this.reason,
+    required this.status,
+    required this.createdAt,
+    this.details,
+    this.driverName,
+    this.reviewRating,
+    this.reviewContent,
+    this.commuterName,
+  });
+
+  final String id;
+  final String reviewId;
+  final String driverId;
+  final String reason;
+  final String? details;
+  final String status;
+  final DateTime createdAt;
+  final String? driverName;
+  final int? reviewRating;
+  final String? reviewContent;
+  final String? commuterName;
+
+  factory ReviewReportRecord.fromJson(Map<String, dynamic> json) {
+    String? driverName;
+    int? rating;
+    String? content;
+    String? commuterName;
+
+    final driver = json['driver'];
+    if (driver is Map) driverName = driver['full_name'] as String?;
+
+    final review = json['review'];
+    if (review is Map) {
+      rating = (review['rating'] as num?)?.toInt();
+      content = review['content'] as String?;
+      final commuter = review['commuter'];
+      if (commuter is Map) {
+        commuterName = commuter['full_name'] as String?;
+      }
+    }
+
+    return ReviewReportRecord(
+      id: json['report_id'] as String,
+      reviewId: json['review_id'] as String,
+      driverId: json['driver_id'] as String,
+      reason: json['reason'] as String? ?? '',
+      details: json['details'] as String?,
+      status: json['status'] as String? ?? 'OPEN',
+      createdAt: DateTime.parse(json['created_at'].toString()),
+      driverName: driverName,
+      reviewRating: rating,
+      reviewContent: content,
+      commuterName: commuterName,
+    );
+  }
+}
+
 class PrivacyRequestRecord {
   const PrivacyRequestRecord({
     required this.id,
@@ -419,6 +599,31 @@ class PrivacyRequestRecord {
       correctionPayload: payload is Map
           ? Map<String, dynamic>.from(payload)
           : null,
+    );
+  }
+}
+
+class BookingSettings {
+  const BookingSettings({
+    required this.disputeWindowMinutes,
+    required this.requestExpireMinutes,
+    required this.requestCooldownMinutes,
+    required this.reviewEligibleMinutes,
+  });
+
+  final int disputeWindowMinutes;
+  final int requestExpireMinutes;
+  final int requestCooldownMinutes;
+  final int reviewEligibleMinutes;
+
+  factory BookingSettings.fromJson(Map<String, dynamic> json) {
+    int n(String key, int fallback) =>
+        (json[key] as num?)?.toInt() ?? fallback;
+    return BookingSettings(
+      disputeWindowMinutes: n('dispute_window_minutes', 20),
+      requestExpireMinutes: n('request_expire_minutes', 30),
+      requestCooldownMinutes: n('request_cooldown_minutes', 30),
+      reviewEligibleMinutes: n('review_eligible_minutes', 0),
     );
   }
 }

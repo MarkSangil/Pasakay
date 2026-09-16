@@ -24,7 +24,9 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
   }
 
   void _reload() {
-    setState(() => _future = ref.read(adminRepositoryProvider).fetchReviews());
+    setState(() {
+      _future = ref.read(adminRepositoryProvider).fetchReviews();
+    });
   }
 
   @override
@@ -35,54 +37,83 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
         if (snapshot.hasError) {
           return Padding(
             padding: const EdgeInsets.all(28),
-            child: Text(friendlyError(snapshot.error!)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(friendlyError(snapshot.error!)),
+                const SizedBox(height: 12),
+                FilledButton(onPressed: _reload, child: const Text('Retry')),
+              ],
+            ),
           );
         }
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final reviews = snapshot.data!.where((r) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final all = snapshot.data!;
+        final reviews = all.where((r) {
           return switch (_filter) {
             'hidden' => r.isHidden,
             'visible' => !r.isHidden,
             'text' => (r.content ?? '').trim().isNotEmpty,
+            'booking' => r.bookingId != null,
             _ => true,
           };
         }).toList();
 
-        return ListView(
-          padding: const EdgeInsets.all(28),
-          children: [
-            const PageHeader(
-              title: 'Reviews',
-              subtitle: 'Manually hide or remove a rating and optional comment.',
-            ),
-            const SizedBox(height: 16),
-            DropdownButton<String>(
-              value: _filter,
-              items: const [
-                DropdownMenuItem(value: 'all', child: Text('All reviews')),
-                DropdownMenuItem(value: 'visible', child: Text('Visible')),
-                DropdownMenuItem(value: 'hidden', child: Text('Hidden')),
-                DropdownMenuItem(value: 'text', child: Text('Has text')),
-              ],
-              onChanged: (value) => setState(() => _filter = value ?? 'all'),
-            ),
-            const SizedBox(height: 16),
-            DataCard(
-              child: reviews.isEmpty
-                  ? const EmptyState(message: 'No reviews in this view.')
-                  : Column(
-                      children: [
-                        const TableHeader(cells: ['Review', 'Rating', 'Visibility', '']),
-                        for (final review in reviews)
-                          _Row(
-                            review: review,
-                            onHide: () => _hide(review),
-                            onDelete: () => _delete(review),
+        return RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView(
+            padding: const EdgeInsets.all(28),
+            children: [
+              PageHeader(
+                title: 'Reviews',
+                subtitle:
+                    'Live passenger reviews from the database. ${all.length} total.',
+                action: IconButton(
+                  tooltip: 'Refresh',
+                  onPressed: _reload,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButton<String>(
+                value: _filter,
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All reviews')),
+                  DropdownMenuItem(value: 'visible', child: Text('Visible')),
+                  DropdownMenuItem(value: 'hidden', child: Text('Hidden')),
+                  DropdownMenuItem(value: 'text', child: Text('Has text')),
+                  DropdownMenuItem(
+                    value: 'booking',
+                    child: Text('Booking-linked'),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _filter = value ?? 'all'),
+              ),
+              const SizedBox(height: 16),
+              DataCard(
+                child: reviews.isEmpty
+                    ? const EmptyState(
+                        message:
+                            'No reviews yet. New booking reviews will appear here after passengers submit them.',
+                      )
+                    : Column(
+                        children: [
+                          const TableHeader(
+                            cells: ['Review', 'Rating', 'Visibility', ''],
                           ),
-                      ],
-                    ),
-            ),
-          ],
+                          for (final review in reviews)
+                            _Row(
+                              review: review,
+                              onHide: () => _hide(review),
+                              onDelete: () => _delete(review),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -117,7 +148,8 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
     final ok = await confirmAction(
       context,
       title: 'Remove review?',
-      message: 'This permanently deletes the review. There is no undo and no change log.',
+      message:
+          'This permanently deletes the review. There is no undo and no change log.',
       confirmLabel: 'Remove',
       destructive: true,
     );
@@ -145,6 +177,7 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = (review.content ?? '').trim();
+    final plate = (review.driverPlate ?? '').trim();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
@@ -159,14 +192,21 @@ class _Row extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${review.commuterName ?? 'Commuter'} → ${review.driverName ?? 'Driver'}',
+                  '${review.commuterName ?? 'Commuter'} → ${review.driverName ?? 'Driver'}'
+                  '${plate.isEmpty ? '' : ' ($plate)'}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(text.isEmpty ? 'Rating only' : text),
                 Text(
-                  formatWhen(review.createdAt),
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  [
+                    formatWhen(review.createdAt),
+                    if (review.bookingId != null) 'Booking-linked',
+                  ].join(' · '),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),

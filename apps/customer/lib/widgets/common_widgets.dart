@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/constants/app_constants.dart';
@@ -63,6 +64,7 @@ class AppTextField extends StatelessWidget {
     this.validator,
     this.maxLines = 1,
     this.maxLength,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -74,6 +76,7 @@ class AppTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final int maxLines;
   final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +87,7 @@ class AppTextField extends StatelessWidget {
       validator: validator,
       maxLines: obscure ? 1 : maxLines,
       maxLength: maxLength,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         hintText: hint,
         prefixIcon: prefixIcon == null

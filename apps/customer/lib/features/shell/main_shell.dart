@@ -26,9 +26,9 @@ class MainShell extends StatelessWidget {
             label: 'Terminals',
           ),
           NavigationDestination(
-            icon: Icon(Icons.schedule_outlined, color: AppColors.navInactive),
-            selectedIcon: Icon(Icons.schedule, color: AppColors.primary),
-            label: 'Recent',
+            icon: Icon(Icons.history_outlined, color: AppColors.navInactive),
+            selectedIcon: Icon(Icons.history, color: AppColors.primary),
+            label: 'History',
           ),
           NavigationDestination(
             icon: Icon(Icons.star_outline_rounded, color: AppColors.navInactive),

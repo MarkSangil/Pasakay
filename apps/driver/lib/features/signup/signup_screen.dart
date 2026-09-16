@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/auth_validators.dart';
+import '../../core/utils/phone_utils.dart';
 import '../../models/terminal.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -42,8 +44,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Future<void> _loadTerminals() async {
     try {
       final list = await ref.read(driverRepositoryProvider).fetchTerminals();
-      if (mounted) setState(() => _terminals = list);
-    } catch (_) {}
+      if (!mounted) return;
+      setState(() => _terminals = list);
+      if (list.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No terminals available yet. Ask an admin to add one.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not load terminals: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -68,6 +87,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       );
       return;
     }
+    if (_terminalId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select your assigned terminal.')),
+      );
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await ref.read(sessionProvider.notifier).signUp(
@@ -77,19 +102,59 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             password: _passwordCtrl.text,
             licenseNumber: _licenseCtrl.text.trim(),
             plateNumber: _plateCtrl.text.trim(),
-            assignedTerminalId: _terminalId,
+            assignedTerminalId: _terminalId!,
           );
-      final err = ref.read(sessionProvider).error;
-      if (err != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(err.toString().replaceFirst('Exception: ', '')),
+      if (!mounted) return;
+      await _showSignupSuccessDialog();
+    } catch (err) {
+      if (!mounted) return;
+      final message = AuthValidators.friendlyAuthError(err);
+      final success = err is AuthFlowException && err.isSuccessInfo;
+      if (success) {
+        await _showSignupSuccessDialog(message: message);
+      } else {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Sign up failed'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _showSignupSuccessDialog({String? message}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Account created'),
+        content: Text(
+          message ??
+              'Your driver account was created and is waiting for administrator verification. '
+              'An admin must verify your license before you can sign in with your mobile number.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.go('/login');
+            },
+            child: const Text('Go to login'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) context.go('/login');
   }
 
   @override
@@ -123,6 +188,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
+                    'We save your email on the profile. After an administrator verifies your license, sign in with your mobile number.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
                     'Sign up to get started as a driver.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.plusJakartaSans(
@@ -137,31 +211,27 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     hint: 'Full Name',
                     icon: Icons.person_outline_rounded,
                     textInputAction: TextInputAction.next,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    validator: AuthValidators.fullName,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
                     controller: _mobileCtrl,
-                    hint: 'Mobile Number',
+                    hint: 'Mobile Number (09XXXXXXXXX)',
                     icon: Icons.phone_outlined,
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    maxLength: PhoneUtils.localDigitCount,
+                    inputFormatters: PhoneUtils.mobileInputFormatters(),
+                    validator: AuthValidators.mobile,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
                     controller: _emailCtrl,
-                    hint: 'Email Address',
+                    hint: 'Email Address (optional)',
                     icon: Icons.mail_outline_rounded,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Required';
-                      if (!v.contains('@')) return 'Enter a valid email';
-                      return null;
-                    },
+                    validator: AuthValidators.email,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
@@ -172,12 +242,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     onToggleObscure: () =>
                         setState(() => _obscurePass = !_obscurePass),
                     textInputAction: TextInputAction.next,
-                    validator: (v) {
-                      if (v == null || v.length < 6) {
-                        return 'At least 6 characters';
-                      }
-                      return null;
-                    },
+                    validator: AuthValidators.password,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
@@ -188,12 +253,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     onToggleObscure: () =>
                         setState(() => _obscureConfirm = !_obscureConfirm),
                     textInputAction: TextInputAction.next,
-                    validator: (v) {
-                      if (v != _passwordCtrl.text) {
-                        return 'Passwords do not match';
-                      }
-                      return null;
-                    },
+                    validator: (v) =>
+                        AuthValidators.confirmPassword(v, _passwordCtrl.text),
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
@@ -201,8 +262,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     hint: "Driver's License Number",
                     icon: Icons.badge_outlined,
                     textInputAction: TextInputAction.next,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    validator: AuthValidators.license,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
@@ -210,15 +270,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     hint: 'Plate Number',
                     icon: Icons.directions_car_filled_outlined,
                     textInputAction: TextInputAction.next,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    validator: AuthValidators.plate,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _terminalId,
                     isExpanded: true,
                     decoration: InputDecoration(
-                      hintText: 'Assigned Terminal (Optional)',
+                      hintText: 'Assigned Terminal',
                       hintStyle: GoogleFonts.plusJakartaSans(
                         color: AppColors.textMuted,
                         fontSize: 14,
@@ -246,6 +305,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         )
                         .toList(),
                     onChanged: (v) => setState(() => _terminalId = v),
+                    validator: (v) =>
+                        v == null ? 'Select your assigned terminal' : null,
                   ),
                   const SizedBox(height: 16),
                   Row(

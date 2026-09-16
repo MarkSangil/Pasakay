@@ -16,10 +16,11 @@ class AdminShell extends ConsumerWidget {
     _Nav('Drivers', '/drivers', Icons.badge_outlined),
     _Nav('Terminals', '/terminals', Icons.place_outlined),
     _Nav('Shifts', '/shifts', Icons.schedule_outlined),
+    _Nav('Booking Settings', '/booking-settings', Icons.timer_outlined),
     _Nav('Commuters', '/commuters', Icons.people_outline),
     _Nav('Reviews', '/reviews', Icons.rate_review_outlined),
-    _Nav('Diagnostics', '/diagnostics', Icons.bug_report_outlined),
-    _Nav('Privacy', '/privacy', Icons.privacy_tip_outlined),
+    _Nav('Disputed Bookings', '/disputed-bookings', Icons.gavel_outlined),
+    _Nav('Review Reports', '/review-reports', Icons.flag_outlined),
   ];
 
   @override
@@ -61,7 +62,9 @@ class AdminShell extends ConsumerWidget {
                   for (final item in _items)
                     _NavButton(
                       item: item,
-                      selected: location == item.path,
+                      selected: location == item.path ||
+                          (item.path != '/overview' &&
+                              location.startsWith(item.path)),
                       onTap: () => context.go(item.path),
                     ),
                   const Spacer(),

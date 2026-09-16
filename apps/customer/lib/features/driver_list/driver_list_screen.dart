@@ -88,28 +88,6 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
     }
   }
 
-  Future<void> _contact({
-    required DriverSummary driver,
-    required String channel,
-  }) async {
-    final auth = ref.read(authServiceProvider);
-    await ref.read(customerRepositoryProvider).addRecent(
-          RecentContact(
-            driverId: driver.id,
-            driverName: driver.fullName,
-            terminalName: driver.terminalName ?? widget.terminalName,
-            contactNumber: driver.contactNumber,
-            at: DateTime.now(),
-            channel: channel,
-          ),
-        );
-    if (channel == 'call') {
-      await auth.openCall(driver.contactNumber);
-    } else {
-      await auth.openSms(driver.contactNumber);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -226,18 +204,32 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
                                       color: AppColors.textSecondary,
                                     ),
                                   ),
+                                  if (d.isBooked) ...[
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.warningSoft,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'Currently booked',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.warning,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
-                            _RoundAction(
-                              icon: Icons.phone_rounded,
-                              onTap: () => _contact(driver: d, channel: 'call'),
-                            ),
-                            const SizedBox(width: 8),
-                            _RoundAction(
-                              icon: Icons.chat_bubble_rounded,
-                              onTap: () => _contact(driver: d, channel: 'sms'),
-                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: AppColors.primary),
                           ],
                         ),
                       ),
@@ -247,30 +239,6 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _RoundAction extends StatelessWidget {
-  const _RoundAction({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: Colors.white, size: 18),
       ),
     );
   }

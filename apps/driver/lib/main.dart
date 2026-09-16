@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers/session_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'services/push_notification_service.dart';
 import 'services/supabase_config.dart';
 
 Future<void> main() async {
@@ -14,6 +15,11 @@ Future<void> main() async {
     await SupabaseConfig.initialize();
   } catch (e) {
     initError = e;
+  }
+
+  // Firebase is optional at boot — push registers after an active driver session.
+  if (initError == null) {
+    await PushNotificationService.initializeFirebase();
   }
 
   runApp(
@@ -39,8 +45,12 @@ class PasakayDriverApp extends ConsumerWidget {
     }
 
     final router = ref.watch(routerProvider);
-    // Keep session alive for redirects.
+    // Keep session alive for redirects + FCM token registration.
     ref.watch(sessionProvider);
+    ref.watch(pushRegistrationProvider);
+    ref.read(pushNotificationServiceProvider).onOpenRoute = (route) {
+      router.go(route);
+    };
 
     return MaterialApp.router(
       title: 'Pasakay Driver',

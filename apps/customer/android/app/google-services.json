@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "156769860204",
+    "project_id": "pasakay-passenger",
+    "storage_bucket": "pasakay-passenger.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:156769860204:android:98a7b99ab5c8552547f649",
+        "android_client_info": {
+          "package_name": "com.pasakay.pasakay_customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAr7TbeNHqHuA8NMxG5J_Pi_4rZRX0Ycx0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

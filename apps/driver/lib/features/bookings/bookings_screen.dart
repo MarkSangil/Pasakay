@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers/session_provider.dart';
@@ -10,16 +14,6 @@ import '../../models/booking.dart';
 import '../../models/driver.dart';
 import '../../widgets/common_widgets.dart';
 
-class BookingsRefresh extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void bump() => state++;
-}
-
-final bookingsRefreshProvider =
-    NotifierProvider<BookingsRefresh, int>(BookingsRefresh.new);
-
 class BookingsScreen extends ConsumerStatefulWidget {
   const BookingsScreen({super.key});
 
@@ -28,88 +22,184 @@ class BookingsScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingsScreenState extends ConsumerState<BookingsScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final TabController _tabs;
+  List<RideRequest> _requests = const [];
   List<Booking> _bookings = const [];
   DriverShift? _shift;
   bool _loading = true;
   int _unread = 0;
-  RealtimeChannel? _channel;
+  RealtimeChannel? _requestChannel;
+  RealtimeChannel? _bookingChannel;
+  Timer? _tick;
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
+    _tabs = TabController(length: 2, vsync: this);
     _tabs.addListener(() {
       if (!_tabs.indexIsChanging) setState(() {});
     });
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+    _poll = Timer.periodic(const Duration(seconds: 4), (_) {
+      unawaited(_load(silent: true));
+    });
     Future.microtask(_bootstrap);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_load(silent: true));
+    }
   }
 
   Future<void> _bootstrap() async {
     await _load();
     final driver = ref.read(sessionProvider).value;
     if (driver == null) return;
-    _channel?.unsubscribe();
-    _channel = ref.read(driverRepositoryProvider).subscribeBookings(
-          driverId: driver.id,
-          onChange: (_) => _load(silent: true),
-        );
+    final repo = ref.read(driverRepositoryProvider);
+    _requestChannel?.unsubscribe();
+    _bookingChannel?.unsubscribe();
+    _requestChannel = repo.subscribeRideRequests(
+      driverId: driver.id,
+      onChange: (_) => _load(silent: true),
+    );
+    _bookingChannel = repo.subscribeBookings(
+      driverId: driver.id,
+      onChange: (_) => _load(silent: true),
+    );
   }
 
   Future<void> _load({bool silent = false}) async {
     final driver = ref.read(sessionProvider).value;
     if (driver == null) return;
     if (!silent) {
-      setState(() {
-        _loading = true;
-      });
+      setState(() => _loading = true);
     }
     try {
       final repo = ref.read(driverRepositoryProvider);
-      final results = await Future.wait([
-        repo.fetchBookings(driverId: driver.id),
-        repo.fetchTodaysShift(driver.id),
-        repo.unreadNotificationCount(driver.id),
-      ]);
+      await repo.fetchBookingSettings();
+      final requests = await repo.fetchRideRequests(
+        driverId: driver.id,
+        status: RideRequestStatus.pending,
+      );
+      final bookings = await repo.fetchBookings(driverId: driver.id);
+      DriverShift? shift;
+      try {
+        shift = await repo.fetchTodaysShift(driver.id);
+      } catch (_) {
+        shift = null;
+      }
+      final unread = await repo.unreadNotificationCount(driver.id);
       if (!mounted) return;
       setState(() {
-        _bookings = results[0] as List<Booking>;
-        _shift = results[1] as DriverShift?;
-        _unread = results[2] as int;
+        _requests = requests;
+        _bookings = bookings;
+        _shift = shift;
+        _unread = unread;
         _loading = false;
       });
     } catch (e) {
+      debugPrint('Bookings load failed: $e');
       if (!mounted) return;
-      // Keep chrome visible even if bookings table is unavailable.
-      setState(() {
-        _bookings = const [];
-        _shift = null;
-        _unread = 0;
-        _loading = false;
-      });
+      if (!silent) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _accept(RideRequest request) async {
+    try {
+      await ref.read(driverRepositoryProvider).acceptRideRequest(request.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Request accepted. Booking confirmed.')),
+      );
+      await _load(silent: true);
+      _tabs.animateTo(1);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _reject(RideRequest request) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject request?'),
+        content: Text('${request.displayName} will be notified.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(driverRepositoryProvider).rejectRideRequest(request.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Request rejected.')),
+      );
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _flag(Booking booking) async {
+    final result = await showDialog<_FlagResult>(
+      context: context,
+      builder: (context) => const _FlagBookingDialog(),
+    );
+    if (result == null) return;
+    try {
+      await ref.read(driverRepositoryProvider).flagBooking(
+            bookingId: booking.id,
+            reason: result.reason,
+            details: result.details,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking reported for review.')),
+      );
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
   @override
   void dispose() {
-    _channel?.unsubscribe();
+    WidgetsBinding.instance.removeObserver(this);
+    _tick?.cancel();
+    _poll?.cancel();
+    _requestChannel?.unsubscribe();
+    _bookingChannel?.unsubscribe();
     _tabs.dispose();
     super.dispose();
   }
 
-  List<Booking> _filtered(BookingStatus status) =>
-      _bookings.where((b) => b.status == status).toList();
-
   @override
   Widget build(BuildContext context) {
-    ref.listen(bookingsRefreshProvider, (_, __) => _load());
+    ref.listen(bookingsRefreshProvider, (_, __) => _load(silent: true));
     final driver = ref.watch(sessionProvider).value;
-    final upcoming = _filtered(BookingStatus.upcoming);
-    final ongoing = _filtered(BookingStatus.ongoing);
-    final completed = _filtered(BookingStatus.completed);
     final shiftLabel = _shift == null
-        ? '${DateFormats.shiftHeader.format(DateTime.now())} • 6:00 AM - 2:00 PM'
+        ? '${DateFormats.shiftHeader.format(DateTime.now())} • On shift'
         : '${DateFormats.shiftHeader.format(_shift!.shiftDate)} • ${DateFormats.timeRange(_shift!.startAt.toLocal(), _shift!.endAt.toLocal())}';
     final terminalName = driver?.currentTerminal?.name ??
         driver?.assignedTerminal?.name ??
@@ -118,7 +208,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: DriverAppBar(
-        title: 'Bookings This Shift',
+        title: 'Requests & Bookings',
         unreadCount: _unread,
       ),
       body: Column(
@@ -132,7 +222,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
                 Text(
                   shiftLabel,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     color: AppColors.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -149,7 +239,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
                       children: [
                         Text(
                           terminalName,
-                          style: const TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                             color: AppColors.textPrimary,
@@ -167,9 +257,8 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
                 TabBar(
                   controller: _tabs,
                   tabs: [
-                    Tab(text: 'Upcoming (${upcoming.length})'),
-                    Tab(text: 'Ongoing (${ongoing.length})'),
-                    Tab(text: 'Completed (${completed.length})'),
+                    Tab(text: 'Requests (${_requests.length})'),
+                    Tab(text: 'Bookings (${_bookings.length})'),
                   ],
                 ),
               ],
@@ -181,9 +270,17 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
                 : TabBarView(
                     controller: _tabs,
                     children: [
-                      _BookingList(items: upcoming, onRefresh: _load),
-                      _BookingList(items: ongoing, onRefresh: _load),
-                      _BookingList(items: completed, onRefresh: _load),
+                      _RequestList(
+                        items: _requests,
+                        onRefresh: _load,
+                        onAccept: _accept,
+                        onReject: _reject,
+                      ),
+                      _BookingList(
+                        items: _bookings,
+                        onRefresh: _load,
+                        onFlag: _flag,
+                      ),
                     ],
                   ),
           ),
@@ -201,19 +298,143 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
   }
 }
 
-class _BookingList extends StatelessWidget {
-  const _BookingList({required this.items, required this.onRefresh});
+class _RequestList extends StatelessWidget {
+  const _RequestList({
+    required this.items,
+    required this.onRefresh,
+    required this.onAccept,
+    required this.onReject,
+  });
 
-  final List<Booking> items;
+  final List<RideRequest> items;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(RideRequest) onAccept;
+  final Future<void> Function(RideRequest) onReject;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'No bookings in this tab.',
-          style: TextStyle(color: AppColors.textMuted),
+          'No pending requests.',
+          style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final request = items[index];
+          return _RequestCard(
+            request: request,
+            onAccept: () => onAccept(request),
+            onReject: () => onReject(request),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RequestCard extends StatelessWidget {
+  const _RequestCard({
+    required this.request,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final RideRequest request;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  request.displayName,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              StatusBadge(
+                label: request.status.label,
+                background: AppColors.warningSoft,
+                foreground: AppColors.warning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Requested ${DateFormats.time.format(request.createdAt.toLocal())}'
+            ' · Expires ${DateFormats.time.format(request.expiresAt.toLocal())}',
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger),
+                  ),
+                  onPressed: onReject,
+                  child: const Text('Reject'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onAccept,
+                  child: const Text('Accept'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingList extends StatelessWidget {
+  const _BookingList({
+    required this.items,
+    required this.onRefresh,
+    required this.onFlag,
+  });
+
+  final List<Booking> items;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(Booking) onFlag;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          'No bookings yet.',
+          style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
         ),
       );
     }
@@ -225,7 +446,10 @@ class _BookingList extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final booking = items[index];
-          return _BookingCard(booking: booking);
+          return _BookingCard(
+            booking: booking,
+            onFlag: () => onFlag(booking),
+          );
         },
       ),
     );
@@ -233,30 +457,23 @@ class _BookingList extends StatelessWidget {
 }
 
 class _BookingCard extends StatelessWidget {
-  const _BookingCard({required this.booking});
+  const _BookingCard({required this.booking, required this.onFlag});
 
   final Booking booking;
+  final VoidCallback onFlag;
 
   @override
   Widget build(BuildContext context) {
     final statusColor = switch (booking.status) {
-      BookingStatus.upcoming => (
-          AppColors.successSoft,
-          AppColors.success,
-        ),
-      BookingStatus.ongoing => (
-          AppColors.warningSoft,
-          AppColors.warning,
-        ),
+      BookingStatus.booked => (AppColors.successSoft, AppColors.success),
+      BookingStatus.flagged => (AppColors.warningSoft, AppColors.warning),
       BookingStatus.completed => (
-          const Color(0xFFEEEEEE),
-          AppColors.textSecondary,
+          AppColors.statusCompletedBg,
+          AppColors.statusCompletedFg,
         ),
-      BookingStatus.cancelled => (
-          AppColors.dangerSoft,
-          AppColors.danger,
-        ),
+      BookingStatus.cancelled => (AppColors.dangerSoft, AppColors.danger),
     };
+    final remaining = booking.disputeRemaining;
 
     return Material(
       color: Colors.white,
@@ -279,8 +496,8 @@ class _BookingCard extends StatelessWidget {
                   SizedBox(
                     width: 72,
                     child: Text(
-                      DateFormats.time.format(booking.scheduledAt.toLocal()),
-                      style: const TextStyle(
+                      DateFormats.time.format(booking.confirmedAt.toLocal()),
+                      style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
                       ),
@@ -294,8 +511,8 @@ class _BookingCard extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                booking.passengerName,
-                                style: const TextStyle(
+                                booking.displayName,
+                                style: GoogleFonts.plusJakartaSans(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15,
                                 ),
@@ -308,34 +525,70 @@ class _BookingCard extends StatelessWidget {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 4),
                         Text(
-                          '${booking.passengerCount} passenger${booking.passengerCount == 1 ? '' : 's'}',
-                          style: const TextStyle(
+                          booking.status == BookingStatus.booked
+                              ? 'Confirmed booking'
+                              : booking.status.badgeLabel,
+                          style: GoogleFonts.plusJakartaSans(
                             color: AppColors.textSecondary,
                             fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        _RouteLine(
-                          pickup: booking.pickupTerminal?.name ?? 'Pickup',
-                          dropoff: booking.dropoffTerminal?.name ?? 'Drop-off',
-                        ),
+                        if (remaining != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Auto-finishes in ${_formatCountdown(remaining)}',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.warning,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (booking.flagReason != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Reason: ${booking.flagReason}',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(120, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+              Row(
+                children: [
+                  if (booking.canFlag)
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.danger,
+                          side: const BorderSide(color: AppColors.danger),
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                        onPressed: onFlag,
+                        child: const Text('Report as Wrong'),
+                      ),
+                    ),
+                  if (booking.canFlag) const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      onPressed: () => context.push('/booking/${booking.id}'),
+                      child: const Text('View Details'),
+                    ),
                   ),
-                  onPressed: () => context.push('/booking/${booking.id}'),
-                  child: const Text('View Details'),
-                ),
+                ],
               ),
             ],
           ),
@@ -345,47 +598,91 @@ class _BookingCard extends StatelessWidget {
   }
 }
 
-class _RouteLine extends StatelessWidget {
-  const _RouteLine({required this.pickup, required this.dropoff});
+String _formatCountdown(Duration d) {
+  final total = d.inSeconds.clamp(0, 24 * 3600);
+  final m = (total ~/ 60).toString().padLeft(2, '0');
+  final s = (total % 60).toString().padLeft(2, '0');
+  return '$m:$s';
+}
 
-  final String pickup;
-  final String dropoff;
+class _FlagResult {
+  const _FlagResult({required this.reason, this.details});
+  final String reason;
+  final String? details;
+}
+
+class _FlagBookingDialog extends StatefulWidget {
+  const _FlagBookingDialog();
+
+  @override
+  State<_FlagBookingDialog> createState() => _FlagBookingDialogState();
+}
+
+class _FlagBookingDialogState extends State<_FlagBookingDialog> {
+  String _reason = BookingFlagReasons.notMyPassenger;
+  final _details = TextEditingController();
+
+  @override
+  void dispose() {
+    _details.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
+    return AlertDialog(
+      title: const Text('Report as Wrong / Not My Passenger'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.circle, size: 10, color: AppColors.success),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                pickup,
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
+            for (final reason in BookingFlagReasons.all)
+              RadioListTile<String>(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(reason, style: const TextStyle(fontSize: 14)),
+                value: reason,
+                groupValue: _reason,
+                onChanged: (v) => setState(() => _reason = v!),
               ),
-            ),
+            if (_reason == BookingFlagReasons.other) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _details,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Details',
+                  hintText: 'Describe the issue',
+                ),
+              ),
+            ],
           ],
         ),
-        Container(
-          margin: const EdgeInsets.only(left: 4),
-          alignment: Alignment.centerLeft,
-          height: 10,
-          child: Container(width: 1.5, color: AppColors.border),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
         ),
-        Row(
-          children: [
-            const Icon(Icons.location_on, size: 12, color: AppColors.textPrimary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                dropoff,
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
+        FilledButton(
+          onPressed: () {
+            final details = _details.text.trim();
+            if (_reason == BookingFlagReasons.other && details.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please add details for Other.')),
+              );
+              return;
+            }
+            Navigator.pop(
+              context,
+              _FlagResult(
+                reason: _reason,
+                details: details.isEmpty ? null : details,
               ),
-            ),
-          ],
+            );
+          },
+          child: const Text('Submit'),
         ),
       ],
     );

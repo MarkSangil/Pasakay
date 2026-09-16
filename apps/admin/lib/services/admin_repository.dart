@@ -13,9 +13,15 @@ class AdminRepository {
       '*, terminal:terminals!drivers_terminal_id_fkey(terminal_id, terminal_name),'
       ' shift:shifts!drivers_shift_id_fkey(shift_id, label, shift_start_time, shift_end_time)';
 
-  static const _reviewSelect =
-      '*, commuter:commuters!reviews_commuter_id_fkey(full_name, username),'
-      ' driver:drivers!reviews_driver_id_fkey(full_name)';
+  static const _flaggedBookingSelect =
+      '*, commuter:commuters!bookings_commuter_id_fkey(full_name, contact_number),'
+      ' driver:drivers!bookings_driver_id_fkey(full_name, plate_number)';
+
+  static const _reviewReportSelect =
+      '*, driver:drivers!review_reports_driver_id_fkey(full_name),'
+      ' review:reviews!review_reports_review_id_fkey('
+      'review_id, rating, content, commuter:commuters!reviews_commuter_id_fkey(full_name)'
+      ')';
 
   Future<AdminProfile?> fetchCurrentAdmin() async {
     final user = _client.auth.currentUser;
@@ -40,6 +46,26 @@ class AdminRepository {
     return (rows as List)
         .map((e) => DriverRecord.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+  }
+
+  Future<DriverRecord?> fetchDriver(String driverId) async {
+    final row = await _client
+        .from('drivers')
+        .select(_driverSelect)
+        .eq('driver_id', driverId)
+        .maybeSingle();
+    if (row == null) return null;
+    return DriverRecord.fromJson(row);
+  }
+
+  /// Contract availability: whether the assigned shift window includes now (Asia/Manila)
+  /// and the driver account is active.
+  Future<bool> isDriverOnShift(String driverId) async {
+    final raw = await _client.rpc(
+      'is_driver_on_shift',
+      params: {'p_driver_id': driverId},
+    );
+    return raw == true;
   }
 
   Future<List<TerminalRecord>> fetchTerminals() async {
@@ -76,13 +102,70 @@ class AdminRepository {
   }
 
   Future<List<ReviewRecord>> fetchReviews() async {
-    final rows = await _client
-        .from('reviews')
-        .select(_reviewSelect)
-        .order('date_created', ascending: false);
-    return (rows as List)
+    final raw = await _client.rpc('admin_list_reviews');
+    final rows = raw is List ? raw : const [];
+    return rows
         .map((e) => ReviewRecord.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+  }
+
+  Future<List<FlaggedBookingRecord>> fetchFlaggedBookings() async {
+    final flagged = await _client
+        .from('bookings')
+        .select(_flaggedBookingSelect)
+        .eq('status', 'FLAGGED')
+        .order('flagged_at', ascending: false);
+    final passengerReported = await _client
+        .from('bookings')
+        .select(_flaggedBookingSelect)
+        .not('passenger_reported_at', 'is', null)
+        .order('passenger_reported_at', ascending: false);
+    final byId = <String, FlaggedBookingRecord>{};
+    for (final e in [...flagged as List, ...passengerReported as List]) {
+      final row = FlaggedBookingRecord.fromJson(Map<String, dynamic>.from(e as Map));
+      byId[row.id] = row;
+    }
+    final items = byId.values.toList()
+      ..sort((a, b) => b.flaggedAt.compareTo(a.flaggedAt));
+    return items;
+  }
+
+  Future<void> resolveDisputedBooking({
+    required String bookingId,
+    required String action,
+  }) async {
+    await _client.rpc(
+      'admin_resolve_disputed_booking',
+      params: {
+        'p_booking_id': bookingId,
+        'p_action': action,
+      },
+    );
+  }
+
+  Future<List<ReviewReportRecord>> fetchOpenReviewReports() async {
+    final rows = await _client
+        .from('review_reports')
+        .select(_reviewReportSelect)
+        .eq('status', 'OPEN')
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .map((e) =>
+            ReviewReportRecord.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<void> resolveReviewReport({
+    required String reportId,
+    required String action,
+  }) async {
+    await _client.rpc(
+      'admin_resolve_review_report',
+      params: {
+        'p_report_id': reportId,
+        'p_action': action,
+      },
+    );
   }
 
   Future<List<DeviceLogRecord>> fetchDeviceLogs() async {
@@ -166,10 +249,33 @@ class AdminRepository {
     });
   }
 
-  Future<void> verifyLicense(String driverId, {required bool verified}) {
+  /// Availability in PASAKAY is the single assigned shift block (one of 3).
+  Future<void> updateDriverAvailability({
+    required DriverRecord driver,
+    required String shiftId,
+  }) {
+    return updateDriver(
+      driverId: driver.id,
+      fullName: driver.fullName,
+      contactNumber: driver.contactNumber,
+      licenseNumber: driver.licenseNumber,
+      plateNumber: driver.plateNumber,
+      username: driver.username,
+      terminalId: driver.terminalId,
+      shiftId: shiftId,
+      todaNumber: driver.todaNumber,
+    );
+  }
+
+  Future<void> verifyLicense(
+    String driverId, {
+    required bool verified,
+    String? todaNumber,
+  }) {
     return _client.rpc('admin_verify_driver_license', params: {
       'p_driver_id': driverId,
       'p_verified': verified,
+      'p_toda_number': todaNumber,
     });
   }
 
@@ -184,6 +290,13 @@ class AdminRepository {
   Future<void> resetDriverPassword(String driverId, String password) {
     return _client.rpc('admin_reset_driver_password', params: {
       'p_driver_id': driverId,
+      'p_password': password,
+    });
+  }
+
+  Future<void> resetCommuterPassword(String commuterId, String password) {
+    return _client.rpc('admin_reset_commuter_password', params: {
+      'p_commuter_id': commuterId,
       'p_password': password,
     });
   }
@@ -307,5 +420,39 @@ class AdminRepository {
 
   Future<void> changePassword(String password) {
     return _client.rpc('admin_change_password', params: {'p_password': password});
+  }
+
+  Future<BookingSettings> fetchBookingSettings() async {
+    final raw = await _client.rpc('get_booking_settings');
+    return BookingSettings.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  Future<BookingSettings> updateBookingSettings({
+    required int disputeWindowMinutes,
+    required int requestExpireMinutes,
+    required int requestCooldownMinutes,
+    required int reviewEligibleMinutes,
+  }) async {
+    final raw = await _client.rpc(
+      'admin_set_booking_settings',
+      params: {
+        'p_dispute_window_minutes': disputeWindowMinutes,
+        'p_request_expire_minutes': requestExpireMinutes,
+        'p_request_cooldown_minutes': requestCooldownMinutes,
+        'p_review_eligible_minutes': reviewEligibleMinutes,
+      },
+    );
+    return BookingSettings.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  Future<Set<String>> fetchBookedDriverIds() async {
+    final rows = await _client
+        .from('bookings')
+        .select('driver_id')
+        .eq('status', 'BOOKED');
+    return {
+      for (final e in rows as List)
+        (Map<String, dynamic>.from(e as Map)['driver_id'] as String),
+    };
   }
 }

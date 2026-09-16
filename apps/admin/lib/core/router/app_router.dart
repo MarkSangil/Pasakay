@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/commuters/commuters_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
-import '../../features/diagnostics/diagnostics_screen.dart';
+import '../../features/disputes/disputed_bookings_screen.dart';
+import '../../features/disputes/review_reports_screen.dart';
+import '../../features/drivers/driver_detail_screen.dart';
 import '../../features/drivers/drivers_screen.dart';
-import '../../features/privacy/privacy_screen.dart';
 import '../../features/reviews/reviews_screen.dart';
+import '../../features/settings/booking_settings_screen.dart';
 import '../../features/shell/admin_shell.dart';
 import '../../features/shifts/shifts_screen.dart';
 import '../../features/terminals/terminals_screen.dart';
@@ -40,12 +42,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/overview', builder: (_, _) => const DashboardScreen()),
           GoRoute(path: '/drivers', builder: (_, _) => const DriversScreen()),
+          GoRoute(
+            path: '/drivers/:id',
+            builder: (_, state) => DriverDetailScreen(
+              driverId: state.pathParameters['id']!,
+            ),
+          ),
           GoRoute(path: '/terminals', builder: (_, _) => const TerminalsScreen()),
           GoRoute(path: '/shifts', builder: (_, _) => const ShiftsScreen()),
+          GoRoute(
+            path: '/booking-settings',
+            builder: (_, _) => const BookingSettingsScreen(),
+          ),
           GoRoute(path: '/commuters', builder: (_, _) => const CommutersScreen()),
           GoRoute(path: '/reviews', builder: (_, _) => const ReviewsScreen()),
-          GoRoute(path: '/diagnostics', builder: (_, _) => const DiagnosticsScreen()),
-          GoRoute(path: '/privacy', builder: (_, _) => const PrivacyScreen()),
+          GoRoute(
+            path: '/disputed-bookings',
+            builder: (_, _) => const DisputedBookingsScreen(),
+          ),
+          GoRoute(
+            path: '/review-reports',
+            builder: (_, _) => const ReviewReportsScreen(),
+          ),
         ],
       ),
     ],

@@ -80,6 +80,7 @@ class DriverSummary {
     this.terminalName,
     this.shiftLabel,
     this.yearsOfService = 0,
+    this.isBooked = false,
   });
 
   final String id;
@@ -92,6 +93,7 @@ class DriverSummary {
   final String? terminalName;
   final String? shiftLabel;
   final int yearsOfService;
+  final bool isBooked;
 
   factory DriverSummary.fromJson(Map<String, dynamic> json) {
     String? terminalName;
@@ -104,6 +106,8 @@ class DriverSummary {
     if (shift is Map) {
       shiftLabel = shift['label'] as String?;
     }
+    terminalName ??= json['terminal_name'] as String?;
+    shiftLabel ??= json['shift_label'] as String?;
 
     return DriverSummary(
       id: (json['driver_id'] ?? json['id']) as String,
@@ -116,6 +120,7 @@ class DriverSummary {
       terminalName: terminalName,
       shiftLabel: shiftLabel,
       yearsOfService: (json['years_of_service'] as num?)?.toInt() ?? 0,
+      isBooked: json['is_booked'] == true,
     );
   }
 }

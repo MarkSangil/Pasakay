@@ -16,6 +16,8 @@ abstract final class AppColors {
   static const Color textMuted = Color(0xFF9AA39C);
   static const Color success = Color(0xFF1B5E3A);
   static const Color successSoft = Color(0xFFE5F2EA);
+  static const Color warning = Color(0xFFE67E22);
+  static const Color warningSoft = Color(0xFFFFF1E4);
   static const Color danger = Color(0xFFD32F2F);
   static const Color star = Color(0xFFF5C518);
   static const Color navInactive = Color(0xFF9AA39C);

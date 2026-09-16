@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/auth_validators.dart';
+import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -36,34 +38,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             _mobileCtrl.text.trim(),
             _passwordCtrl.text,
           );
-      final err = ref.read(sessionProvider).error;
-      if (err != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyError(err))),
-        );
-      }
+    } catch (err) {
+      if (!mounted) return;
+      final message = AuthValidators.friendlyAuthError(err);
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Sign in failed'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  String _friendlyError(Object err) {
-    final text = err.toString().replaceFirst('Exception: ', '');
-    if (text.contains('Invalid login')) {
-      return 'Invalid mobile number or password.';
-    }
-    if (text.contains('administrator') ||
-        text.contains('suspended') ||
-        text.contains('deactivated') ||
-        text.contains('verify')) {
-      return text;
-    }
-    return 'Unable to log in. Check your credentials and connection.';
+  void _forgotPassword() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset password'),
+        content: const Text(
+          'Pasakay driver accounts use a secure phone-based login, so '
+          'self-service email reset is not available.\n\n'
+          'Ask a system administrator to set a temporary password for you, '
+          'then change it from Profile after you sign in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Restored to the pre-signup-fix layout that matched the login mockup.
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: SkylineBackground(
@@ -95,12 +113,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 22),
                   AppTextField(
                     controller: _mobileCtrl,
-                    hint: 'Enter mobile number',
+                    hint: 'Mobile number (09XXXXXXXXX)',
                     icon: Icons.phone_outlined,
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    maxLength: PhoneUtils.localDigitCount,
+                    inputFormatters: PhoneUtils.mobileInputFormatters(),
+                    validator: AuthValidators.mobile,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
@@ -111,20 +130,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onToggleObscure: () => setState(() => _obscure = !_obscure),
                     textInputAction: TextInputAction.done,
                     validator: (v) =>
-                        v == null || v.isEmpty ? 'Required' : null,
+                        (v == null || v.isEmpty) ? 'Password is required' : null,
                   ),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Contact your administrator to reset your password.',
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: _forgotPassword,
                       child: const Text('Forgot password?'),
                     ),
                   ),

@@ -24,14 +24,23 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
 
   Future<_ShiftPage> _load() async {
     final repo = ref.read(adminRepositoryProvider);
-    final results = await Future.wait([repo.fetchShifts(), repo.fetchDrivers()]);
+    final results = await Future.wait([
+      repo.fetchShifts(),
+      repo.fetchDrivers(),
+      repo.fetchBookedDriverIds(),
+    ]);
     return _ShiftPage(
       shifts: results[0] as List<ShiftRecord>,
       drivers: results[1] as List<DriverRecord>,
+      bookedDriverIds: results[2] as Set<String>,
     );
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() {
+    setState(() {
+      _future = _load();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +67,7 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
               _ShiftCard(
                 shift: shift,
                 drivers: page.drivers.where((d) => d.shiftId == shift.id).toList(),
+                bookedDriverIds: page.bookedDriverIds,
                 allShifts: page.shifts,
                 onEdit: () => _edit(shift),
                 onReassign: (driver, nextId) => _reassign(driver, nextId),
@@ -111,15 +121,21 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
 }
 
 class _ShiftPage {
-  const _ShiftPage({required this.shifts, required this.drivers});
+  const _ShiftPage({
+    required this.shifts,
+    required this.drivers,
+    required this.bookedDriverIds,
+  });
   final List<ShiftRecord> shifts;
   final List<DriverRecord> drivers;
+  final Set<String> bookedDriverIds;
 }
 
 class _ShiftCard extends StatelessWidget {
   const _ShiftCard({
     required this.shift,
     required this.drivers,
+    required this.bookedDriverIds,
     required this.allShifts,
     required this.onEdit,
     required this.onReassign,
@@ -127,6 +143,7 @@ class _ShiftCard extends StatelessWidget {
 
   final ShiftRecord shift;
   final List<DriverRecord> drivers;
+  final Set<String> bookedDriverIds;
   final List<ShiftRecord> allShifts;
   final VoidCallback onEdit;
   final void Function(DriverRecord driver, String shiftId) onReassign;
@@ -162,7 +179,34 @@ class _ShiftCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 8),
                   child: Row(
                     children: [
-                      Expanded(child: Text(driver.fullName)),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(child: Text(driver.fullName)),
+                            if (bookedDriverIds.contains(driver.id)) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.warningSoft,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Booked',
+                                  style: TextStyle(
+                                    color: AppColors.warning,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                       Text(driver.terminalName ?? '', style: const TextStyle(color: AppColors.textSecondary)),
                       const SizedBox(width: 12),
                       DropdownButton<String>(

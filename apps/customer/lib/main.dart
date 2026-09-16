@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers/session_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'services/push_notification_service.dart';
 import 'services/supabase_config.dart';
 
 Future<void> main() async {
@@ -14,6 +15,10 @@ Future<void> main() async {
     await SupabaseConfig.initialize();
   } catch (e) {
     initError = e;
+  }
+
+  if (initError == null) {
+    await PushNotificationService.initializeFirebase();
   }
 
   runApp(
@@ -40,6 +45,10 @@ class PasakayCustomerApp extends ConsumerWidget {
 
     final router = ref.watch(routerProvider);
     ref.watch(sessionProvider);
+    ref.watch(pushRegistrationProvider);
+    ref.read(pushNotificationServiceProvider).onOpenRoute = (route) {
+      router.go(route);
+    };
 
     return MaterialApp.router(
       title: 'Pasakay',

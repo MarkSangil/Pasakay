@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -116,6 +117,8 @@ class AppTextField extends StatelessWidget {
     this.textInputAction,
     this.validator,
     this.suffix,
+    this.maxLength,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -127,6 +130,8 @@ class AppTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final String? Function(String?)? validator;
   final Widget? suffix;
+  final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -136,12 +141,15 @@ class AppTextField extends StatelessWidget {
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       validator: validator,
+      maxLength: maxLength,
+      inputFormatters: inputFormatters,
       style: GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w500,
       ),
       decoration: InputDecoration(
         hintText: hint,
+        counterText: maxLength == null ? null : '',
         prefixIcon: Icon(icon, color: AppColors.textMuted, size: 22),
         suffixIcon: suffix ??
             (onToggleObscure == null

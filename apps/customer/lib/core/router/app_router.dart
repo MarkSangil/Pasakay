@@ -6,8 +6,9 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/signup_screen.dart';
 import '../../features/driver_list/driver_list_screen.dart';
 import '../../features/driver_profile/driver_profile_screen.dart';
+import '../../features/history/history_screen.dart';
+import '../../features/notifications/notifications_screen.dart';
 import '../../features/profile/profile_screen.dart';
-import '../../features/recent/recent_screen.dart';
 import '../../features/review/review_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/splash/splash_screen.dart';
@@ -17,31 +18,40 @@ import '../providers/session_provider.dart';
 final _rootKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final session = ref.watch(sessionProvider);
+  final refresh = _RouterRefresh();
+  ref.listen(sessionProvider, (_, __) => refresh.tick());
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/splash',
-    refreshListenable: _RouterRefresh(ref),
+    refreshListenable: refresh,
     redirect: (context, state) {
+      final session = ref.read(sessionProvider);
       final loc = state.matchedLocation;
-      final loggingIn =
+      final onAuth =
           loc == '/login' || loc == '/signup' || loc == '/splash';
 
+      // Stay on login/signup while session resolves so form errors remain visible.
       if (session.isLoading) {
+        if (onAuth && loc != '/splash') return null;
         return loc == '/splash' ? null : '/splash';
       }
 
       final signedIn = session.value != null;
 
-      if (!signedIn && !loggingIn) return '/login';
-      if (signedIn && loggingIn) return '/terminals';
+      if (!signedIn && !onAuth) return '/login';
+      if (signedIn && onAuth) return '/terminals';
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/signup', builder: (_, __) => const SignupScreen()),
+      GoRoute(path: '/signup', builder: (_, _) => const SignupScreen()),
+      GoRoute(
+        path: '/notifications',
+        builder: (_, _) => const NotificationsScreen(),
+      ),
       GoRoute(
         path: '/terminal/:id',
         builder: (_, state) => DriverListScreen(
@@ -71,8 +81,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/recent',
-                builder: (_, __) => const RecentScreen(),
+                path: '/history',
+                builder: (_, __) => const HistoryScreen(),
               ),
             ],
           ),
@@ -80,7 +90,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/review',
-                builder: (_, __) => const ReviewScreen(),
+                builder: (_, state) => ReviewScreen(
+                  bookingId: state.uri.queryParameters['bookingId'],
+                ),
               ),
             ],
           ),
@@ -99,9 +111,5 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 class _RouterRefresh extends ChangeNotifier {
-  _RouterRefresh(this._ref) {
-    _ref.listen(sessionProvider, (_, __) => notifyListeners());
-  }
-
-  final Ref _ref;
+  void tick() => notifyListeners();
 }

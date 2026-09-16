@@ -23,7 +23,9 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
   }
 
   void _reload() {
-    setState(() => _future = ref.read(adminRepositoryProvider).fetchTerminals());
+    setState(() {
+      _future = ref.read(adminRepositoryProvider).fetchTerminals();
+    });
   }
 
   @override

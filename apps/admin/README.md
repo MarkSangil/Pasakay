@@ -12,18 +12,28 @@ Web console at `apps/admin` for the seven scoped admin features. It talks to the
 
 Change the password from the sidebar after first sign-in. Driver and commuter accounts cannot open this console.
 
+## Deploy (GitHub Pages)
+
+The admin console deploys from `main` to a dedicated `gh-pages` branch (Flutter web build of `apps/admin` only).
+
+1. In the GitHub repo, add Actions secrets:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+2. Enable Pages: **Settings → Pages → Deploy from a branch → `gh-pages` / `/ (root)`**.
+3. Push to `main` (or run **Deploy admin to GitHub Pages**). Site URL: `https://marksangil.github.io/Pasakay/`.
+
 ## Run
 
 ```bash
 cd apps/admin
-cp .env.example .env   # already filled for the shared project if you copied credentials
+cp .env.example .env
 flutter pub get
 flutter run -d chrome
 ```
 
 ## What this console does — and does not
 
-1. **Drivers** — add, edit, remove, assign terminal and shift, visually mark a license verified, then activate, suspend, or deactivate. Activation is blocked until that manual check. No LTFRB lookup, no bulk import/export, no change log.
+1. **Drivers** — list, open a detail page to view/edit profile and shift availability, verify license, activate/suspend/deactivate. Activation is blocked until that manual check. No LTFRB lookup, no bulk import/export, no change log.
 2. **Terminals** — plain-text list. No map. Delete is blocked while drivers are still assigned; reassign them first.
 3. **Shifts** — edit the 3 existing blocks and reassign drivers. Cannot add or delete a shift. This is assignment, not clock-in. Overlapping windows warn but a driver can only sit on one shift.
 4. **Commuters** — view, suspend, or deactivate. No abuse-report queue, no blacklist, and no call/SMS content.

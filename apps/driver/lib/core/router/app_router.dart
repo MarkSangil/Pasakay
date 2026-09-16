@@ -18,34 +18,37 @@ import '../providers/session_provider.dart';
 final _rootKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final session = ref.watch(sessionProvider);
+  final refresh = _RouterRefresh();
+  ref.listen(sessionProvider, (_, __) => refresh.tick());
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/splash',
-    refreshListenable: _RouterRefresh(ref),
+    refreshListenable: refresh,
     redirect: (context, state) {
-      final loggingIn = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/signup' ||
-          state.matchedLocation == '/splash';
+      final session = ref.read(sessionProvider);
+      final loc = state.matchedLocation;
+      final onAuth =
+          loc == '/login' || loc == '/signup' || loc == '/splash';
 
       if (session.isLoading) {
-        return state.matchedLocation == '/splash' ? null : '/splash';
+        if (onAuth && loc != '/splash') return null;
+        return loc == '/splash' ? null : '/splash';
       }
 
       final driver = session.value;
       final signedIn = driver != null;
 
-      if (!signedIn && !loggingIn) return '/login';
-      if (signedIn && (state.matchedLocation == '/login' ||
-          state.matchedLocation == '/signup' ||
-          state.matchedLocation == '/splash')) {
+      if (!signedIn && !onAuth) return '/login';
+      if (signedIn &&
+          (loc == '/login' || loc == '/signup' || loc == '/splash')) {
         if (driver.currentTerminalId == null) return '/terminal';
         return '/bookings';
       }
       if (signedIn &&
           driver.currentTerminalId == null &&
-          state.matchedLocation != '/terminal') {
+          loc != '/terminal') {
         return '/terminal';
       }
       return null;
@@ -112,9 +115,5 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 class _RouterRefresh extends ChangeNotifier {
-  _RouterRefresh(this._ref) {
-    _ref.listen(sessionProvider, (_, __) => notifyListeners());
-  }
-
-  final Ref _ref;
+  void tick() => notifyListeners();
 }

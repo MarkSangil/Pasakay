@@ -5,11 +5,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
-import '../../models/models.dart';
+import '../../models/ride_booking.dart';
 import '../../widgets/common_widgets.dart';
 
 class ReviewScreen extends ConsumerStatefulWidget {
-  const ReviewScreen({super.key});
+  const ReviewScreen({super.key, this.bookingId});
+
+  final String? bookingId;
 
   @override
   ConsumerState<ReviewScreen> createState() => _ReviewScreenState();
@@ -18,15 +20,15 @@ class ReviewScreen extends ConsumerStatefulWidget {
 class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   final _reviewCtrl = TextEditingController();
   int _rating = 0;
-  String? _selectedDriverId;
-  List<RecentContact> _recent = const [];
-  List<DriverReview> _myReviews = const [];
+  List<BookingRecord> _eligible = const [];
+  String? _selectedBookingId;
   bool _loading = true;
   bool _submitting = false;
 
   @override
   void initState() {
     super.initState();
+    _selectedBookingId = widget.bookingId;
     Future.microtask(_load);
   }
 
@@ -38,21 +40,24 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
 
   Future<void> _load() async {
     final repo = ref.read(customerRepositoryProvider);
-    final recent = await repo.loadRecent();
-    final reviews = await repo.fetchMyReviews();
+    final bookings = await repo.fetchMyBookings();
+    final now = DateTime.now().toUtc();
+    final eligible =
+        bookings.where((b) => b.reviewAvailable(now)).toList(growable: false);
     if (!mounted) return;
     setState(() {
-      _recent = recent;
-      _myReviews = reviews;
-      _selectedDriverId ??= recent.isNotEmpty ? recent.first.driverId : null;
+      _eligible = eligible;
+      _selectedBookingId ??=
+          eligible.isNotEmpty ? eligible.first.id : widget.bookingId;
       _loading = false;
     });
   }
 
   Future<void> _submit() async {
-    if (_selectedDriverId == null) {
+    final bookingId = _selectedBookingId;
+    if (bookingId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a recent driver to review.')),
+        const SnackBar(content: Text('No booking available to review.')),
       );
       return;
     }
@@ -64,8 +69,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     }
     setState(() => _submitting = true);
     try {
-      await ref.read(customerRepositoryProvider).submitReview(
-            driverId: _selectedDriverId!,
+      await ref.read(customerRepositoryProvider).submitBookingReview(
+            bookingId: bookingId,
             rating: _rating,
             content: _reviewCtrl.text,
           );
@@ -76,6 +81,10 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         const SnackBar(content: Text('Thanks for your review!')),
       );
       await _load();
+      if (!mounted) return;
+      if (_eligible.isEmpty) {
+        context.go('/history');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,11 +97,6 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uniqueRecent = <String, RecentContact>{};
-    for (final r in _recent) {
-      uniqueRecent.putIfAbsent(r.driverId, () => r);
-    }
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: const GreenAppBar(title: 'Review'),
@@ -101,33 +105,59 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
               children: [
-                Text(
-                  'Rate your experience',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      'Rate your experience',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip:
+                          "You're seeing this review prompt because this booking was confirmed after the driver accepted your request. PASAKAY does not use GPS or trip tracking to verify rides.",
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('About reviews'),
+                            content: const Text(
+                              "You're seeing this review prompt because this booking was confirmed after the driver accepted your request. PASAKAY does not use GPS or trip tracking to verify rides.",
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.info_outline),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                if (uniqueRecent.isNotEmpty)
+                if (_eligible.isNotEmpty)
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedDriverId,
+                    initialValue: _selectedBookingId,
                     decoration: const InputDecoration(
-                      labelText: 'Driver',
+                      labelText: 'Completed booking',
                     ),
-                    items: uniqueRecent.values
+                    items: _eligible
                         .map(
-                          (d) => DropdownMenuItem(
-                            value: d.driverId,
-                            child: Text(d.driverName),
+                          (b) => DropdownMenuItem(
+                            value: b.id,
+                            child: Text(b.driverName ?? 'Driver'),
                           ),
                         )
                         .toList(),
-                    onChanged: (v) => setState(() => _selectedDriverId = v),
+                    onChanged: (v) => setState(() => _selectedBookingId = v),
                   )
                 else
                   Text(
-                    'Contact a driver first to leave a review.',
+                    'No completed bookings left to review. Reported trips and already-reviewed bookings cannot be reviewed.',
                     style: GoogleFonts.plusJakartaSans(
                       color: AppColors.textMuted,
                     ),
@@ -136,21 +166,24 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                 StarRating(
                   value: _rating,
                   size: 36,
-                  onChanged: (v) => setState(() => _rating = v),
+                  onChanged: _eligible.isEmpty
+                      ? null
+                      : (v) => setState(() => _rating = v),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _reviewCtrl,
                   maxLines: 4,
                   maxLength: 300,
-                  onChanged: (_) => setState(() {}),
+                  enabled: _eligible.isNotEmpty,
                   decoration: const InputDecoration(
                     hintText: 'Write your review (optional)',
                   ),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
-                  onPressed: _submitting ? null : _submit,
+                  onPressed:
+                      _submitting || _eligible.isEmpty ? null : _submit,
                   child: _submitting
                       ? const SizedBox(
                           width: 22,
@@ -162,37 +195,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                         )
                       : const Text('Submit Review'),
                 ),
-                const SizedBox(height: 28),
-                const SectionTitle('Recent Drivers'),
-                const SizedBox(height: 10),
-                if (uniqueRecent.isEmpty)
-                  Text(
-                    'No recent drivers yet.',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: AppColors.textMuted,
-                    ),
-                  )
-                else
-                  ...uniqueRecent.values.map((d) {
-                    final prior = _myReviews
-                        .where((r) => r.driverId == d.driverId)
-                        .toList();
-                    final rating = prior.isEmpty ? 0 : prior.first.rating;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const AvatarCircle(size: 42),
-                      title: Text(
-                        d.driverName,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      subtitle: StarRating(value: rating, size: 18),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => context.push('/driver/${d.driverId}'),
-                    );
-                  }),
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () => context.go('/history'),
+                  child: const Text('Open History'),
+                ),
               ],
             ),
     );

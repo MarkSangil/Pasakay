@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -115,7 +116,49 @@ class ProfileScreen extends ConsumerWidget {
                       value: driver.currentTerminal?.name ?? 'Not set',
                       onTap: () => context.push('/terminal'),
                     ),
-                    const SizedBox(height: 28),
+                    _InfoRow(
+                      icon: Icons.schedule_outlined,
+                      label: 'Operating Schedule',
+                      value: driver.onShift
+                          ? 'On shift now'
+                          : (driver.assignedTerminal?.name != null
+                              ? 'Assigned shift'
+                              : 'Not assigned'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => _enablePush(context, ref, driver.id),
+                      icon: const Icon(Icons.notifications_active_outlined),
+                      label: const Text('Enable push notifications'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _editNotificationPrefs(context, ref, driver.id),
+                      icon: const Icon(Icons.notifications_outlined),
+                      label: const Text('Notification preferences'),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                        minimumSize: const Size.fromHeight(52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => _changePassword(context, ref),
+                      child: Text(
+                        'Change Password',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.danger,
@@ -143,6 +186,133 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                 ),
     );
+  }
+
+  Future<void> _changePassword(BuildContext context, WidgetRef ref) async {
+    final result = await showDialog<_PasswordChange>(
+      context: context,
+      builder: (_) => const _ChangePasswordDialog(),
+    );
+    if (result == null || !context.mounted) return;
+    try {
+      await ref.read(sessionProvider.notifier).changePassword(
+            currentPassword: result.current,
+            newPassword: result.next,
+          );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password updated successfully.')),
+        );
+      }
+    } catch (err) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
+  Future<void> _enablePush(
+    BuildContext context,
+    WidgetRef ref,
+    String driverId,
+  ) async {
+    final push = ref.read(pushNotificationServiceProvider);
+    final granted = await push.requestPermission();
+    await push.stop();
+    await push.startForDriver(driverId);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          granted
+              ? 'Push notifications enabled.'
+              : 'Permission denied. Enable notifications in system Settings.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editNotificationPrefs(
+    BuildContext context,
+    WidgetRef ref,
+    String driverId,
+  ) async {
+    final repo = ref.read(driverRepositoryProvider);
+    final prefs = await repo.fetchNotificationPreferences(driverId);
+    if (!context.mounted) return;
+    var reminders = prefs['schedule_reminders'] ?? true;
+    var changes = prefs['schedule_changes'] ?? true;
+    var availability = prefs['availability_changes'] ?? true;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            return AlertDialog(
+              title: const Text('Notification preferences'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Schedule reminders'),
+                    subtitle: const Text('Approaching, start, and end'),
+                    value: reminders,
+                    onChanged: (v) => setLocal(() => reminders = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Schedule changes'),
+                    subtitle: const Text('Updates, cancellations, terminal'),
+                    value: changes,
+                    onChanged: (v) => setLocal(() => changes = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Availability changes'),
+                    value: availability,
+                    onChanged: (v) => setLocal(() => availability = v),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (saved != true) return;
+    try {
+      await repo.upsertNotificationPreferences(
+        driverId: driverId,
+        scheduleReminders: reminders,
+        scheduleChanges: changes,
+        availabilityChanges: availability,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Notification preferences saved.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 }
 
@@ -193,6 +363,89 @@ class _InfoRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PasswordChange {
+  const _PasswordChange(this.current, this.next);
+  final String current;
+  final String next;
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog();
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change password'),
+      content: Form(
+        key: _formKey,
+        child: SizedBox(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _current,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Current password'),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Required' : null,
+              ),
+              TextFormField(
+                controller: _next,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+                validator: AuthValidators.password,
+              ),
+              TextFormField(
+                controller: _confirm,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm new password'),
+                validator: (v) =>
+                    AuthValidators.confirmPassword(v, _next.text),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.pop(
+              context,
+              _PasswordChange(_current.text, _next.text),
+            );
+          },
+          child: const Text('Update'),
+        ),
+      ],
     );
   }
 }

@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/auth_validators.dart';
+import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -16,14 +18,14 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailOrPhoneCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
   bool _submitting = false;
 
   @override
   void dispose() {
-    _emailOrPhoneCtrl.dispose();
+    _mobileCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
@@ -33,30 +35,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _submitting = true);
     try {
       await ref.read(sessionProvider.notifier).login(
-            _emailOrPhoneCtrl.text.trim(),
+            _mobileCtrl.text.trim(),
             _passwordCtrl.text,
           );
-      final err = ref.read(sessionProvider).error;
-      if (err != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyError(err))),
-        );
-      }
+    } catch (err) {
+      if (!mounted) return;
+      final message = AuthValidators.friendlyAuthError(err);
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Sign in failed'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  String _friendlyError(Object err) {
-    final s = err.toString().replaceFirst('Exception: ', '');
-    if (s.contains('Invalid login')) return 'Incorrect email/phone or password.';
-    if (s.contains('suspended') || s.contains('deactivated')) return s;
-    return s;
+  void _forgotPassword() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset password'),
+        content: const Text(
+          'Pasakay passenger accounts use a secure phone-based login, so '
+          'self-service email reset is not available.\n\n'
+          'Ask a system administrator to set a temporary password for you, '
+          'then change it from Profile after you sign in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // No bottom navigation on login — auth-only scaffold.
     return Scaffold(
       resizeToAvoidBottomInset: false,
       body: SkylineBackground(
@@ -86,12 +111,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 18),
                   AppTextField(
-                    controller: _emailOrPhoneCtrl,
-                    hint: 'Email or Phone Number',
-                    prefixIcon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    controller: _mobileCtrl,
+                    hint: 'Mobile number (09XXXXXXXXX)',
+                    prefixIcon: Icons.phone_outlined,
+                    keyboardType: TextInputType.phone,
+                    maxLength: PhoneUtils.localDigitCount,
+                    inputFormatters: PhoneUtils.mobileInputFormatters(),
+                    validator: AuthValidators.mobile,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
@@ -109,20 +135,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     validator: (v) =>
-                        (v == null || v.length < 6) ? 'Min 6 characters' : null,
+                        (v == null || v.isEmpty) ? 'Password is required' : null,
                   ),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Contact your administrator to reset your password.',
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: _forgotPassword,
                       child: const Text('Forgot password?'),
                     ),
                   ),

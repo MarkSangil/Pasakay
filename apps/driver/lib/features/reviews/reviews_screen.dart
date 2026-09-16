@@ -17,6 +17,8 @@ class ReviewsScreen extends ConsumerStatefulWidget {
 
 class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
   List<Review> _reviews = const [];
+  double _averageRating = 0;
+  int _reviewCount = 0;
   bool _loading = true;
   bool _showAll = false;
 
@@ -34,12 +36,18 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
     }
     setState(() => _loading = true);
     try {
-      final reviews = await ref
-          .read(driverRepositoryProvider)
-          .fetchReviews(driver.id, limit: _showAll ? null : 10);
+      final repo = ref.read(driverRepositoryProvider);
+      final results = await Future.wait([
+        repo.fetchReviews(driver.id, limit: _showAll ? null : 10),
+        repo.fetchReviewSummary(driver.id),
+      ]);
       if (!mounted) return;
+      final summary =
+          results[1] as ({double averageRating, int reviewCount});
       setState(() {
-        _reviews = reviews;
+        _reviews = results[0] as List<Review>;
+        _averageRating = summary.averageRating;
+        _reviewCount = summary.reviewCount;
         _loading = false;
       });
     } catch (_) {
@@ -47,11 +55,33 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
     }
   }
 
+  Future<void> _report(Review review) async {
+    final result = await showDialog<_ReportResult>(
+      context: context,
+      builder: (context) => const _ReportReviewDialog(),
+    );
+    if (result == null) return;
+    try {
+      await ref.read(driverRepositoryProvider).reportReview(
+            reviewId: review.id,
+            reason: result.reason,
+            details: result.details,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Review reported for moderation.')),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final driver = ref.watch(sessionProvider).value;
-    final rating = driver?.averageRating ?? 0;
-    final count = driver?.reviewCount ?? _reviews.length;
+    final rating = _averageRating;
+    final count = _reviewCount;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -63,7 +93,6 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
                 children: [
-                  // Mockup: large score on the left, stars + count on the right.
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -120,7 +149,12 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
                       ),
                     )
                   else
-                    ..._reviews.map((r) => _ReviewCard(review: r)),
+                    ..._reviews.map(
+                      (r) => _ReviewCard(
+                        review: r,
+                        onReport: () => _report(r),
+                      ),
+                    ),
                   if (!_showAll && count > _reviews.length) ...[
                     const SizedBox(height: 8),
                     OutlinedButton(
@@ -139,8 +173,9 @@ class _ReviewsScreenState extends ConsumerState<ReviewsScreen> {
 }
 
 class _ReviewCard extends StatelessWidget {
-  const _ReviewCard({required this.review});
+  const _ReviewCard({required this.review, required this.onReport});
   final Review review;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -151,15 +186,9 @@ class _ReviewCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(
-                radius: 20,
-                backgroundColor: AppColors.border,
-                child: Icon(Icons.person, size: 20, color: AppColors.textMuted),
-              ),
-              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  review.passengerName,
+                  'Passenger review',
                   style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -171,28 +200,38 @@ class _ReviewCard extends StatelessWidget {
           ),
           if (review.comment != null && review.comment!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 50),
-              child: Text(
-                review.comment!,
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                  height: 1.35,
-                ),
+            Text(
+              review.comment!,
+              style: GoogleFonts.plusJakartaSans(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.35,
               ),
             ),
           ],
           const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.only(left: 50),
-            child: Text(
-              DateFormats.dateShort.format(review.createdAt.toLocal()),
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textMuted,
-                fontSize: 12,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  DateFormats.dateShort.format(review.createdAt.toLocal()),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
               ),
-            ),
+              TextButton(
+                onPressed: onReport,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.danger,
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Report Review'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           const Divider(height: 1),
@@ -218,6 +257,94 @@ class _Stars extends StatelessWidget {
           size: size,
         );
       }),
+    );
+  }
+}
+
+class _ReportResult {
+  const _ReportResult({required this.reason, this.details});
+  final String reason;
+  final String? details;
+}
+
+class _ReportReviewDialog extends StatefulWidget {
+  const _ReportReviewDialog();
+
+  @override
+  State<_ReportReviewDialog> createState() => _ReportReviewDialogState();
+}
+
+class _ReportReviewDialogState extends State<_ReportReviewDialog> {
+  static const _reasons = [
+    'Fake or misleading',
+    'Harassment or abuse',
+    'Not my passenger',
+    'Other',
+  ];
+
+  String _reason = _reasons.first;
+  final _details = TextEditingController();
+
+  @override
+  void dispose() {
+    _details.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Report Review'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final reason in _reasons)
+              RadioListTile<String>(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(reason, style: const TextStyle(fontSize: 14)),
+                value: reason,
+                groupValue: _reason,
+                onChanged: (v) => setState(() => _reason = v!),
+              ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _details,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Details (optional)',
+                hintText: 'Add more context for moderators',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final details = _details.text.trim();
+            if (_reason == 'Other' && details.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please add details for Other.')),
+              );
+              return;
+            }
+            Navigator.pop(
+              context,
+              _ReportResult(
+                reason: _reason,
+                details: details.isEmpty ? null : details,
+              ),
+            );
+          },
+          child: const Text('Submit'),
+        ),
+      ],
     );
   }
 }

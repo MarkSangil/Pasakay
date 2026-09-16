@@ -113,7 +113,7 @@ class _RecentList extends ConsumerWidget {
     if (items.isEmpty) {
       return Center(
         child: Text(
-          'No recent trips.',
+          'No recent bookings.',
           style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
         ),
       );
@@ -132,14 +132,14 @@ class _RecentList extends ConsumerWidget {
             child: Icon(Icons.person, color: AppColors.textMuted),
           ),
           title: Text(
-            b.passengerName,
+            b.displayName,
             style: GoogleFonts.plusJakartaSans(
               fontWeight: FontWeight.w700,
               fontSize: 15,
             ),
           ),
           subtitle: Text(
-            b.pickupTerminal?.name ?? 'Terminal',
+            b.status.label,
             style: GoogleFonts.plusJakartaSans(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -149,24 +149,36 @@ class _RecentList extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                DateFormats.time.format(b.scheduledAt.toLocal()),
+                DateFormats.time.format(b.confirmedAt.toLocal()),
                 style: GoogleFonts.plusJakartaSans(
                   color: AppColors.textMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Call',
-                onPressed: () =>
-                    ref.read(authServiceProvider).openCall(b.passengerMobile),
-                icon: const Icon(
-                  Icons.phone,
-                  color: AppColors.textPrimary,
-                  size: 22,
+              if (b.status == BookingStatus.booked) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: 'Message',
+                  onPressed: () =>
+                      ref.read(authServiceProvider).openSms(b.commuterMobile),
+                  icon: const Icon(
+                    Icons.sms_outlined,
+                    color: AppColors.textPrimary,
+                    size: 22,
+                  ),
                 ),
-              ),
+                IconButton(
+                  tooltip: 'Call',
+                  onPressed: () =>
+                      ref.read(authServiceProvider).openCall(b.commuterMobile),
+                  icon: const Icon(
+                    Icons.phone,
+                    color: AppColors.textPrimary,
+                    size: 22,
+                  ),
+                ),
+              ],
             ],
           ),
         );

@@ -24,7 +24,9 @@ class _CommutersScreenState extends ConsumerState<CommutersScreen> {
   }
 
   void _reload() {
-    setState(() => _future = ref.read(adminRepositoryProvider).fetchCommuters());
+    setState(() {
+      _future = ref.read(adminRepositoryProvider).fetchCommuters();
+    });
   }
 
   @override
@@ -49,7 +51,8 @@ class _CommutersScreenState extends ConsumerState<CommutersScreen> {
           children: [
             const PageHeader(
               title: 'Commuters',
-              subtitle: 'View accounts and suspend or deactivate them.',
+              subtitle:
+                  'Approve pending signups, or suspend / deactivate accounts.',
             ),
             const SizedBox(height: 16),
             SearchField(hint: 'Search name or contact', onChanged: (v) => setState(() => _query = v)),
@@ -64,6 +67,7 @@ class _CommutersScreenState extends ConsumerState<CommutersScreen> {
                           _Row(
                             commuter: commuter,
                             onStatus: () => _setStatus(commuter),
+                            onReset: () => _resetPassword(commuter),
                           ),
                       ],
                     ),
@@ -91,6 +95,30 @@ class _CommutersScreenState extends ConsumerState<CommutersScreen> {
       if (mounted) showError(context, error);
     }
   }
+
+  Future<void> _resetPassword(CommuterRecord commuter) async {
+    final password = await promptText(
+      context,
+      title: 'Reset password',
+      label: 'Temporary password',
+      obscure: true,
+      confirmLabel: 'Reset',
+    );
+    if (password == null || !mounted) return;
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .resetCommuterPassword(commuter.id, password);
+      if (mounted) {
+        showInfo(
+          context,
+          'Password reset. Give it to the passenger outside the app.',
+        );
+      }
+    } catch (error) {
+      if (mounted) showError(context, error);
+    }
+  }
 }
 
 class _Choice {
@@ -100,10 +128,15 @@ class _Choice {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.commuter, required this.onStatus});
+  const _Row({
+    required this.commuter,
+    required this.onStatus,
+    required this.onReset,
+  });
 
   final CommuterRecord commuter;
   final VoidCallback onStatus;
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +162,16 @@ class _Row extends StatelessWidget {
           Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(onPressed: onStatus, child: const Text('Status')),
+              child: PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'status') onStatus();
+                  if (value == 'reset') onReset();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'status', child: Text('Set status')),
+                  PopupMenuItem(value: 'reset', child: Text('Reset password')),
+                ],
+              ),
             ),
           ),
         ],
@@ -153,7 +195,10 @@ class _StatusDialogState extends State<_StatusDialog> {
   @override
   void initState() {
     super.initState();
-    _status = widget.commuter.status;
+    // Pending accounts are approved by setting Active.
+    _status = widget.commuter.status == 'pending_verification'
+        ? 'active'
+        : widget.commuter.status;
     _reason.text = widget.commuter.statusReason ?? '';
   }
 
@@ -175,7 +220,7 @@ class _StatusDialogState extends State<_StatusDialog> {
             DropdownButtonFormField<String>(
               initialValue: _status,
               items: const [
-                DropdownMenuItem(value: 'active', child: Text('Active')),
+                DropdownMenuItem(value: 'active', child: Text('Active (approve)')),
                 DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
                 DropdownMenuItem(value: 'deactivated', child: Text('Deactivated')),
               ],
