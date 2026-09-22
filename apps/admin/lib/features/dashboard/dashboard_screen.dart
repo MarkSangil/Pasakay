@@ -75,14 +75,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     label: 'Drivers',
                     value: '${data.driversTotal}',
                     caption:
-                        '${data.driversPending} pending · ${data.driversActive} active · ${data.driversSuspended} suspended',
+                        '${data.driversPending} pending · ${data.driversActive} active · ${data.driversSuspended} deactivated',
                     onTap: () => context.go('/drivers'),
                   ),
                   MetricCard(
                     label: 'Commuters',
                     value: '${data.commutersTotal}',
                     caption:
-                        '${data.commutersSuspended} suspended or deactivated',
+                        '${data.commutersSuspended} deactivated',
                     onTap: () => context.go('/commuters'),
                   ),
                   MetricCard(

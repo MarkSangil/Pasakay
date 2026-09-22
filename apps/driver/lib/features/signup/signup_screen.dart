@@ -8,8 +8,10 @@ import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
+import '../../core/utils/text_formatters.dart';
 import '../../models/terminal.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/legal_dialog.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -82,7 +84,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     if (!_agreed) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please agree to the Terms and Privacy Policy.'),
+          content: Text(
+            'Please tick all three consent boxes for the Terms, Privacy Policy, and data use.',
+          ),
         ),
       );
       return;
@@ -259,17 +263,21 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   const SizedBox(height: 12),
                   AppTextField(
                     controller: _licenseCtrl,
-                    hint: "Driver's License Number",
+                    hint: "Driver's License (D00-00-000000)",
                     icon: Icons.badge_outlined,
                     textInputAction: TextInputAction.next,
+                    maxLength: 13,
+                    inputFormatters: const [DriverLicenseFormatter()],
                     validator: AuthValidators.license,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
                     controller: _plateCtrl,
-                    hint: 'Plate Number',
+                    hint: 'Plate Number (ABC-1234)',
                     icon: Icons.directions_car_filled_outlined,
                     textInputAction: TextInputAction.next,
+                    maxLength: 8,
+                    inputFormatters: const [PlateNumberFormatter()],
                     validator: AuthValidators.plate,
                   ),
                   const SizedBox(height: 12),
@@ -309,81 +317,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         v == null ? 'Select your assigned terminal' : null,
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Checkbox(
-                        value: _agreed,
-                        activeColor: AppColors.primary,
-                        checkColor: Colors.white,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                        side: const BorderSide(
-                          color: AppColors.textSecondary,
-                          width: 1.6,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        onChanged: (v) => setState(() => _agreed = v ?? false),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            text: 'I agree to the ',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
-                              height: 1.35,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: 'Terms and Conditions',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Terms and Conditions',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                              ),
-                              TextSpan(
-                                text: ' and ',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'Privacy Policy.',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Privacy Policy'),
-                                      ),
-                                    );
-                                  },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                  ConsentCheckboxes(
+                    onChanged: (v) => setState(() => _agreed = v),
                   ),
                   const SizedBox(height: 18),
                   ElevatedButton(

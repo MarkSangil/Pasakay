@@ -98,9 +98,17 @@ class DriverSummary {
   factory DriverSummary.fromJson(Map<String, dynamic> json) {
     String? terminalName;
     String? shiftLabel;
+    // Prefer the driver's current (picked) terminal over the assigned one —
+    // terminal driver lists are keyed by the effective terminal.
+    final currentTerminal = json['current_terminal'];
     final terminal = json['terminal'] ?? json['terminals'];
     final shift = json['shift'] ?? json['shifts'];
-    if (terminal is Map) {
+    if (currentTerminal is Map) {
+      terminalName =
+          (currentTerminal['terminal_name'] ?? currentTerminal['name'])
+              as String?;
+    }
+    if (terminalName == null && terminal is Map) {
       terminalName = (terminal['terminal_name'] ?? terminal['name']) as String?;
     }
     if (shift is Map) {
@@ -109,13 +117,14 @@ class DriverSummary {
     terminalName ??= json['terminal_name'] as String?;
     shiftLabel ??= json['shift_label'] as String?;
 
+    final currentTerminalId = json['current_terminal_id'] as String?;
     return DriverSummary(
       id: (json['driver_id'] ?? json['id']) as String,
       fullName: (json['full_name'] ?? 'Driver') as String,
       contactNumber: (json['contact_number'] ?? '') as String,
       plateNumber: (json['plate_number'] ?? '—') as String,
       todaNumber: json['toda_number'] as String?,
-      terminalId: json['terminal_id'] as String?,
+      terminalId: currentTerminalId ?? json['terminal_id'] as String?,
       shiftId: json['shift_id'] as String?,
       terminalName: terminalName,
       shiftLabel: shiftLabel,

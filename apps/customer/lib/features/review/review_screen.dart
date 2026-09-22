@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/auth_validators.dart';
 import '../../models/ride_booking.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -22,6 +23,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   int _rating = 0;
   List<BookingRecord> _eligible = const [];
   String? _selectedBookingId;
+  String? _error;
   bool _loading = true;
   bool _submitting = false;
 
@@ -39,18 +41,31 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   }
 
   Future<void> _load() async {
-    final repo = ref.read(customerRepositoryProvider);
-    final bookings = await repo.fetchMyBookings();
-    final now = DateTime.now().toUtc();
-    final eligible =
-        bookings.where((b) => b.reviewAvailable(now)).toList(growable: false);
-    if (!mounted) return;
-    setState(() {
-      _eligible = eligible;
-      _selectedBookingId ??=
-          eligible.isNotEmpty ? eligible.first.id : widget.bookingId;
-      _loading = false;
-    });
+    try {
+      final repo = ref.read(customerRepositoryProvider);
+      final bookings = await repo.fetchMyBookings();
+      final now = DateTime.now().toUtc();
+      final eligible =
+          bookings.where((b) => b.reviewAvailable(now)).toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _eligible = eligible;
+        // The dropdown asserts when its value is not one of `items`, so the
+        // selection must always resolve to an eligible booking (or null).
+        final ids = eligible.map((b) => b.id).toSet();
+        if (_selectedBookingId == null || !ids.contains(_selectedBookingId)) {
+          _selectedBookingId = eligible.isNotEmpty ? eligible.first.id : null;
+        }
+        _error = null;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = AuthValidators.friendlyError(e);
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -88,7 +103,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(AuthValidators.friendlyError(e))),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -102,7 +117,36 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       appBar: const GreenAppBar(title: 'Review'),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _loading = true;
+                              _error = null;
+                            });
+                            _load();
+                          },
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
               children: [
                 Row(
@@ -141,6 +185,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                 const SizedBox(height: 12),
                 if (_eligible.isNotEmpty)
                   DropdownButtonFormField<String>(
+                    // Remount when the selection changes (e.g. after a submit
+                    // _load() points at another eligible booking): a stale
+                    // FormField value not in `items` red-screens ("exactly
+                    // one item with DropdownButton's value").
+                    key: ValueKey(_selectedBookingId),
                     initialValue: _selectedBookingId,
                     decoration: const InputDecoration(
                       labelText: 'Completed booking',

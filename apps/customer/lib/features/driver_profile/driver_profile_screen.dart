@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../models/models.dart';
 import '../../models/ride_booking.dart';
@@ -70,7 +71,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = AuthValidators.friendlyError(e);
         _loading = false;
       });
     }
@@ -135,7 +136,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(content: Text(AuthValidators.friendlyError(e))),
         );
       }
     } finally {
@@ -191,9 +192,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            e.toString().contains('Exception:')
-                ? e.toString().split('Exception:').last.trim()
-                : 'Unable to send request. Please try again.',
+            AuthValidators.friendlyError(e),
           ),
         ),
       );
@@ -268,7 +267,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(AuthValidators.friendlyError(e))),
       );
     } finally {
       if (mounted) setState(() => _requestBusy = false);
@@ -374,13 +373,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                             value: showPhone
                                 ? PhoneUtils.display(peerPhone)
                                 : 'Visible during accepted booking only',
-                          ),
-                          _InfoRow(
-                            icon: Icons.workspace_premium_outlined,
-                            label: 'Years of Service',
-                            value: driver.yearsOfService > 0
-                                ? '${driver.yearsOfService} years'
-                                : '—',
                           ),
                           _InfoRow(
                             icon: Icons.location_on_outlined,

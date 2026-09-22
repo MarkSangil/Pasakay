@@ -28,6 +28,34 @@ abstract final class DriverFormValidators {
     return null;
   }
 
+  /// Strict format check for NEW drivers: canonical `D00-00-000000`
+  /// (`D` + 10 digits after normalization). Not used on the edit form so
+  /// legacy rows (e.g. seed plate `123ABC`) can still be updated.
+  static String? licenseNumberFormat(String? value) {
+    final required = licenseNumber(value);
+    if (required != null) return required;
+    final v = _alnum(value).toUpperCase();
+    if (!RegExp(r'^[A-Z][0-9]{10}$').hasMatch(v)) {
+      return "Format: D00-00-000000 (e.g. D12-34-567890)";
+    }
+    return null;
+  }
+
+  /// Strict format check for NEW drivers: canonical `ABC-1234`
+  /// (3 letters + 4 digits after normalization).
+  static String? plateNumberFormat(String? value) {
+    final required = plateNumber(value);
+    if (required != null) return required;
+    final v = _alnum(value).toUpperCase();
+    if (!RegExp(r'^[A-Z]{3}[0-9]{4}$').hasMatch(v)) {
+      return 'Format: ABC-1234 (3 letters, 4 digits)';
+    }
+    return null;
+  }
+
+  static String _alnum(String? value) =>
+      (value ?? '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+
   static String? ssltodaNumber(String? value, {bool required = false}) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) {

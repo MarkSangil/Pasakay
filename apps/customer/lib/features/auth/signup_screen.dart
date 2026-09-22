@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/legal_dialog.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -26,6 +27,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _obscure = true;
   bool _obscureConfirm = true;
   bool _submitting = false;
+  bool _agreed = false;
 
   @override
   void dispose() {
@@ -39,6 +41,16 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_agreed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please tick all three consent boxes for the Terms, Privacy Policy, and data use.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await ref.read(sessionProvider.notifier).signUp(
@@ -200,6 +212,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                     validator: (v) =>
                         AuthValidators.confirmPassword(v, _passwordCtrl.text),
+                  ),
+                  const SizedBox(height: 18),
+                  ConsentCheckboxes(
+                    onChanged: (v) => setState(() => _agreed = v),
                   ),
                   const SizedBox(height: 18),
                   ElevatedButton(

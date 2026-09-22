@@ -53,7 +53,9 @@ class CustomerRepository {
         .select(
           'driver_id, full_name, plate_number, is_active,'
           ' status, terminal_id, shift_id, toda_number,'
+          ' current_terminal_id,'
           ' terminal:terminals!drivers_terminal_id_fkey(*),'
+          ' current_terminal:terminals!drivers_current_terminal_id_fkey(*),'
           ' shift:shifts!drivers_shift_id_fkey(*)',
         )
         .eq('driver_id', driverId)
@@ -274,8 +276,9 @@ class CustomerRepository {
         .select(
           'driver:drivers!commuter_followed_drivers_driver_id_fkey('
           'driver_id, full_name, plate_number, years_of_service, is_active,'
-          ' status, terminal_id, shift_id,'
+          ' status, terminal_id, shift_id, current_terminal_id,'
           ' terminal:terminals!drivers_terminal_id_fkey(*),'
+          ' current_terminal:terminals!drivers_current_terminal_id_fkey(*),'
           ' shift:shifts!drivers_shift_id_fkey(*))',
         )
         .eq('commuter_id', user.id)

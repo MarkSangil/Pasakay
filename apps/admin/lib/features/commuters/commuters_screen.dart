@@ -52,7 +52,7 @@ class _CommutersScreenState extends ConsumerState<CommutersScreen> {
             const PageHeader(
               title: 'Commuters',
               subtitle:
-                  'Approve pending signups, or suspend / deactivate accounts.',
+                  'Approve pending signups, or deactivate accounts.',
             ),
             const SizedBox(height: 16),
             SearchField(hint: 'Search name or contact', onChanged: (v) => setState(() => _query = v)),
@@ -196,9 +196,11 @@ class _StatusDialogState extends State<_StatusDialog> {
   void initState() {
     super.initState();
     // Pending accounts are approved by setting Active.
-    _status = widget.commuter.status == 'pending_verification'
+    // Suspended was merged into Deactivated.
+    final raw = widget.commuter.status;
+    _status = raw == 'pending_verification'
         ? 'active'
-        : widget.commuter.status;
+        : (raw == 'suspended' ? 'deactivated' : raw);
     _reason.text = widget.commuter.statusReason ?? '';
   }
 
@@ -221,7 +223,6 @@ class _StatusDialogState extends State<_StatusDialog> {
               initialValue: _status,
               items: const [
                 DropdownMenuItem(value: 'active', child: Text('Active (approve)')),
-                DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
                 DropdownMenuItem(value: 'deactivated', child: Text('Deactivated')),
               ],
               onChanged: (value) => setState(() => _status = value ?? _status),
@@ -232,7 +233,7 @@ class _StatusDialogState extends State<_StatusDialog> {
               maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Reason',
-                helperText: 'Required to suspend or deactivate. Reactivate is allowed.',
+                helperText: 'Required to deactivate. Reactivate is allowed.',
               ),
             ),
           ],

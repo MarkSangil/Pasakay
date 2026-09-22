@@ -287,6 +287,38 @@ class AdminRepository {
     });
   }
 
+  /// Pending driver shift-change requests (from the driver app).
+  Future<List<ShiftChangeRequestRecord>> fetchShiftChangeRequests() async {
+    final raw = await _client.rpc('admin_list_shift_change_requests');
+    final rows = raw is List ? raw : const [];
+    return rows
+        .map((e) =>
+            ShiftChangeRequestRecord.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  /// Approve (moves driver to the requested shift) or reject a request.
+  /// Returns the refreshed pending list.
+  Future<List<ShiftChangeRequestRecord>> reviewShiftChangeRequest({
+    required String requestId,
+    required bool approve,
+    String? note,
+  }) async {
+    final raw = await _client.rpc(
+      'admin_review_shift_change_request',
+      params: {
+        'p_request_id': requestId,
+        'p_approve': approve,
+        'p_note': note,
+      },
+    );
+    final rows = raw is List ? raw : const [];
+    return rows
+        .map((e) =>
+            ShiftChangeRequestRecord.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
   Future<void> resetDriverPassword(String driverId, String password) {
     return _client.rpc('admin_reset_driver_password', params: {
       'p_driver_id': driverId,

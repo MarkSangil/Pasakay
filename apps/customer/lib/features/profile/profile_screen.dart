@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/legal_dialog.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -82,6 +83,42 @@ class ProfileScreen extends ConsumerWidget {
                   onPressed: () => _changePassword(context, ref),
                   child: const Text('Change Password'),
                 ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.support_agent_outlined,
+                      color: AppColors.primary),
+                  title: const Text('Contact Administrator'),
+                  subtitle: const Text('pasakay06@gmail.com'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showLegalDialog(
+                    context,
+                    initialTab: LegalTab.contact,
+                  ),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.description_outlined,
+                      color: AppColors.primary),
+                  title: const Text('Terms and Conditions'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showLegalDialog(
+                    context,
+                    initialTab: LegalTab.terms,
+                  ),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.privacy_tip_outlined,
+                      color: AppColors.primary),
+                  title: const Text('Privacy Policy'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showLegalDialog(
+                    context,
+                    initialTab: LegalTab.privacy,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 const SizedBox(height: 12),
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(

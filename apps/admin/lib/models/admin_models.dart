@@ -3,7 +3,8 @@ import 'package:intl/intl.dart';
 String statusLabel(String status) => switch (status) {
       'pending_verification' => 'Pending verification',
       'active' => 'Active',
-      'suspended' => 'Suspended',
+      // Suspended was replaced by Deactivated (same effect: blocked login).
+      'suspended' => 'Deactivated',
       'deactivated' => 'Deactivated',
       'received' => 'Received',
       'in_progress' => 'In progress',
@@ -603,6 +604,58 @@ class PrivacyRequestRecord {
   }
 }
 
+/// A pending driver request to move to a different shift block.
+class ShiftChangeRequestRecord {
+  const ShiftChangeRequestRecord({
+    required this.id,
+    required this.driverId,
+    required this.driverName,
+    required this.requestedShiftId,
+    this.plateNumber,
+    this.currentShiftId,
+    this.currentShiftLabel,
+    this.requestedShiftLabel,
+    this.requestedShiftStart,
+    this.requestedShiftEnd,
+    this.createdAt,
+  });
+
+  final String id;
+  final String driverId;
+  final String driverName;
+  final String? plateNumber;
+  final String? currentShiftId;
+  final String? currentShiftLabel;
+  final String requestedShiftId;
+  final String? requestedShiftLabel;
+  final String? requestedShiftStart;
+  final String? requestedShiftEnd;
+  final DateTime? createdAt;
+
+  String get requestedWindow => requestedShiftStart == null ||
+          requestedShiftEnd == null
+      ? ''
+      : ' (${formatClock(requestedShiftStart!)} – ${formatClock(requestedShiftEnd!)})';
+
+  factory ShiftChangeRequestRecord.fromJson(Map<String, dynamic> json) {
+    return ShiftChangeRequestRecord(
+      id: json['id'] as String,
+      driverId: json['driverId'] as String,
+      driverName: json['driverName'] as String? ?? 'Driver',
+      plateNumber: json['plateNumber'] as String?,
+      currentShiftId: json['currentShiftId'] as String?,
+      currentShiftLabel: json['currentShiftLabel'] as String?,
+      requestedShiftId: json['requestedShiftId'] as String,
+      requestedShiftLabel: json['requestedShiftLabel'] as String?,
+      requestedShiftStart: json['requestedShiftStart']?.toString(),
+      requestedShiftEnd: json['requestedShiftEnd']?.toString(),
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.tryParse(json['createdAt'].toString()),
+    );
+  }
+}
+
 class BookingSettings {
   const BookingSettings({
     required this.disputeWindowMinutes,
@@ -620,7 +673,7 @@ class BookingSettings {
     int n(String key, int fallback) =>
         (json[key] as num?)?.toInt() ?? fallback;
     return BookingSettings(
-      disputeWindowMinutes: n('dispute_window_minutes', 20),
+      disputeWindowMinutes: n('dispute_window_minutes', 60),
       requestExpireMinutes: n('request_expire_minutes', 30),
       requestCooldownMinutes: n('request_cooldown_minutes', 30),
       reviewEligibleMinutes: n('review_eligible_minutes', 0),

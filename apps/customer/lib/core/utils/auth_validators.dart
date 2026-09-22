@@ -48,16 +48,13 @@ abstract final class AuthValidators {
   }
 
   static String friendlyAuthError(Object error) {
-    final raw = error.toString();
-    final text = raw
-        .replaceFirst(RegExp(r'^Exception:\s*'), '')
-        .replaceFirst(RegExp(r'^AuthApiException:\s*'), '')
-        .replaceFirst(RegExp(r'^AuthException:\s*'), '')
-        .replaceFirst(RegExp(r'^PostgrestException\([^)]*\):\s*'), '')
-        .replaceFirst(RegExp(r'^PostgrestException:\s*'), '');
+    final text = extractMessage(error);
     final lower = text.toLowerCase();
     if (lower.contains('invalid login') || lower.contains('invalid credentials')) {
       return 'Incorrect mobile number or password.';
+    }
+    if (lower.contains('banned') || lower.contains('not allowed')) {
+      return text;
     }
     if (lower.contains('user already registered') ||
         lower.contains('already been registered') ||
@@ -69,22 +66,49 @@ abstract final class AuthValidators {
         lower.contains('email_not_confirmed')) {
       return 'Confirm your email before signing in. Check your inbox for the verification link.';
     }
-    if (lower.contains('confirm') ||
-        lower.contains('confirmation') ||
-        lower.contains('check your email') ||
-        lower.contains('verify')) {
-      return text;
-    }
-    if (lower.contains('password')) return text;
-    if (lower.contains('suspended') ||
-        lower.contains('deactivated') ||
-        lower.contains('waiting for') ||
-        lower.contains('not a passenger') ||
-        lower.contains('not a driver') ||
-        lower.contains('account created')) {
-      return text;
-    }
     return text;
+  }
+
+  /// Friendly message for non-auth failures (repository calls, RPCs, etc.).
+  static String friendlyError(Object error) {
+    final text = extractMessage(error);
+    if (text.isEmpty) return 'Something went wrong. Please try again.';
+    return text;
+  }
+
+  /// Pulls the human-readable message out of raw exception `toString()`s.
+  ///
+  /// Handles `AuthApiException: message: ... statusCode: ...` and
+  /// `PostgrestException(message: ..., code: ...)` formats so users never see
+  /// raw exception dumps.
+  static String extractMessage(Object error) {
+    final raw = error.toString();
+    var text = raw.replaceFirst(RegExp(r'^[A-Za-z]*Exception:\s*'), '');
+
+    // PostgrestException(message: ..., code: ..., ...)
+    final pg = RegExp(r'^\w*\s*\(\s*message:\s*').firstMatch(text);
+    if (pg != null) {
+      text = text.substring(pg.end);
+      final end = _nextKeyIndex(text);
+      text = end == -1 ? text : text.substring(0, end);
+    } else {
+      // AuthApiException: message: ... statusCode: ...
+      final msg = RegExp(r'^\s*message:\s*').firstMatch(text);
+      if (msg != null) {
+        text = text.substring(msg.end);
+        final end = _nextKeyIndex(text);
+        text = end == -1 ? text : text.substring(0, end);
+      }
+    }
+    return text.replaceAll(RegExp(r'[),\s]+$'), '').trim();
+  }
+
+  static int _nextKeyIndex(String text) {
+    final match = RegExp(
+      r'\s+(?:statusCode|errorDescription|error|code|hint|details|'
+      r'errorSummary|msg|error_code)\s*[:=]',
+    ).firstMatch(text);
+    return match?.start ?? -1;
   }
 }
 
