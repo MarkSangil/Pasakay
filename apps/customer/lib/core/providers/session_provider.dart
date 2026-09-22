@@ -86,7 +86,8 @@ class SessionController extends AsyncNotifier<Commuter?> {
     }
   }
 
-  /// Session may include active + suspended. Deactivated / pending cannot stay signed in.
+  /// Session must be active. Suspended is replaced by deactivated; pending
+  /// cannot stay signed in.
   Future<Commuter?> _requireUsableSession(Commuter? commuter) async {
     if (commuter == null) {
       if (ref.read(authServiceProvider).currentUser != null) {
@@ -94,7 +95,7 @@ class SessionController extends AsyncNotifier<Commuter?> {
       }
       return null;
     }
-    if (commuter.status == 'active' || commuter.status == 'suspended') {
+    if (commuter.status == 'active') {
       return commuter;
     }
     await ref.read(authServiceProvider).logout();
@@ -103,7 +104,7 @@ class SessionController extends AsyncNotifier<Commuter?> {
 
   Future<Commuter?> _requireLoginAllowed(Commuter? commuter) async {
     if (commuter == null) return null;
-    if (commuter.status == 'active' || commuter.status == 'suspended') {
+    if (commuter.status == 'active') {
       return commuter;
     }
     await ref.read(authServiceProvider).logout();
@@ -115,7 +116,8 @@ class SessionController extends AsyncNotifier<Commuter?> {
       switch (commuter.status) {
         'pending_verification' =>
           'Your account is waiting for administrator approval.$detail',
-        'deactivated' => 'Your account has been deactivated.$detail',
+        'deactivated' || 'suspended' =>
+          'Your account has been deactivated.$detail',
         _ => 'This account cannot sign in.$detail',
       },
     );
@@ -171,8 +173,7 @@ final pushRegistrationProvider = Provider<void>((ref) {
       if (next.isLoading || next.hasError) return;
       next.whenData((commuter) async {
         final push = ref.read(pushNotificationServiceProvider);
-        if (commuter != null &&
-            (commuter.status == 'active' || commuter.status == 'suspended')) {
+        if (commuter != null && commuter.status == 'active') {
           await Future<void>.delayed(const Duration(milliseconds: 400));
           await push.startForCommuter(commuter.id);
         } else if (previous?.value != null && commuter == null) {

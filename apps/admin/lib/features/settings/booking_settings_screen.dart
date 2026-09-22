@@ -63,6 +63,23 @@ class _BookingSettingsScreenState extends ConsumerState<BookingSettingsScreen> {
       showError(context, 'Enter whole numbers for every field.');
       return;
     }
+    // Ranges mirror admin_set_booking_settings on the server.
+    if (dispute < 1 || dispute > 240) {
+      showError(context, 'Booking / dispute timer must be 1–240 minutes.');
+      return;
+    }
+    if (expire < 1 || expire > 240) {
+      showError(context, 'Request expiry must be 1–240 minutes.');
+      return;
+    }
+    if (cooldown < 0 || cooldown > 240) {
+      showError(context, 'Request cooldown must be 0–240 minutes.');
+      return;
+    }
+    if (review < 0 || review > 240) {
+      showError(context, 'Review eligible after must be 0–240 minutes.');
+      return;
+    }
     setState(() => _saving = true);
     try {
       await ref.read(adminRepositoryProvider).updateBookingSettings(
@@ -129,7 +146,7 @@ class _BookingSettingsScreenState extends ConsumerState<BookingSettingsScreen> {
                     _NumberField(
                       controller: _dispute,
                       label: 'Booking / dispute timer',
-                      helper: 'Default 20. Drivers can report during this window.',
+                      helper: 'Default 60. Drivers can report during this window.',
                     ),
                     const SizedBox(height: 12),
                     _NumberField(

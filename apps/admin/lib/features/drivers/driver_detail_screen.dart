@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/driver_form_validators.dart';
+import '../../core/utils/text_formatters.dart';
 import '../../models/admin_models.dart';
 import '../../widgets/admin_widgets.dart';
 
@@ -302,8 +303,9 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: _license,
+                      inputFormatters: [DriverLicenseFormatter()],
                       decoration: const InputDecoration(
-                        labelText: 'License number',
+                        labelText: "Driver's License (D00-00-000000)",
                         helperText:
                             'Changing the license clears verification until checked again.',
                       ),
@@ -312,8 +314,10 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: _plate,
-                      decoration:
-                          const InputDecoration(labelText: 'Plate number'),
+                      inputFormatters: [PlateNumberFormatter()],
+                      decoration: const InputDecoration(
+                        labelText: 'Plate Number (ABC-1234)',
+                      ),
                       validator: DriverFormValidators.plateNumber,
                     ),
                     const SizedBox(height: 10),

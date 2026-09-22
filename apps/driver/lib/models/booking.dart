@@ -1,5 +1,5 @@
 /// Dispute window after confirmation (fallback; server setting is authoritative).
-const Duration kBookingDisputeWindow = Duration(minutes: 20);
+const Duration kBookingDisputeWindow = Duration(minutes: 60);
 
 int? _disputeWindowMinutesOverride;
 

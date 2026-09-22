@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/driver_form_validators.dart';
+import '../../core/utils/text_formatters.dart';
 import '../../models/admin_models.dart';
 import '../../widgets/admin_widgets.dart';
 
@@ -75,7 +76,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
           children: [
             PageHeader(
               title: 'Drivers',
-              subtitle: 'Add, edit, assign, verify, suspend, or remove driver profiles.',
+              subtitle: 'Add, edit, assign, verify, deactivate, or remove driver profiles.',
               action: FilledButton.icon(
                 onPressed: page.terminals.isEmpty || page.shifts.isEmpty
                     ? null
@@ -98,7 +99,6 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
                     DropdownMenuItem(value: 'all', child: Text('All statuses')),
                     DropdownMenuItem(value: 'pending_verification', child: Text('Pending')),
                     DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
                     DropdownMenuItem(value: 'deactivated', child: Text('Deactivated')),
                   ],
                   onChanged: (value) => setState(() => _status = value ?? 'all'),
@@ -126,6 +126,8 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
                       ],
                     ),
             ),
+            const SizedBox(height: 16),
+            const _ShiftChangeRequestsCard(),
           ],
         );
       },
@@ -417,14 +419,22 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _license,
-                  decoration: const InputDecoration(labelText: 'License number'),
-                  validator: DriverFormValidators.licenseNumber,
+                  decoration: const InputDecoration(
+                    labelText: "Driver's License (D00-00-000000)",
+                    helperText: 'Format: D00-00-000000',
+                  ),
+                  inputFormatters: [DriverLicenseFormatter()],
+                  validator: DriverFormValidators.licenseNumberFormat,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _plate,
-                  decoration: const InputDecoration(labelText: 'Plate number'),
-                  validator: DriverFormValidators.plateNumber,
+                  decoration: const InputDecoration(
+                    labelText: 'Plate Number (ABC-1234)',
+                    helperText: 'Format: ABC-1234',
+                  ),
+                  inputFormatters: [PlateNumberFormatter()],
+                  validator: DriverFormValidators.plateNumberFormat,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -593,7 +603,10 @@ class _StatusDialogState extends State<_StatusDialog> {
   @override
   void initState() {
     super.initState();
-    _status = widget.driver.status;
+    // Suspended was merged into Deactivated; map legacy values.
+    _status = widget.driver.status == 'suspended'
+        ? 'deactivated'
+        : widget.driver.status;
     _reason.text = widget.driver.statusReason ?? '';
   }
 
@@ -625,7 +638,6 @@ class _StatusDialogState extends State<_StatusDialog> {
                   value: 'pending_verification',
                   child: Text('Pending verification'),
                 ),
-                const DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
                 const DropdownMenuItem(value: 'deactivated', child: Text('Deactivated')),
               ],
               onChanged: (value) => setState(() => _status = value ?? _status),
@@ -636,7 +648,7 @@ class _StatusDialogState extends State<_StatusDialog> {
               maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Reason',
-                helperText: 'Required for suspend and deactivate. There is no blacklist.',
+                helperText: 'Required to deactivate. There is no blacklist.',
               ),
             ),
           ],
@@ -652,6 +664,126 @@ class _StatusDialogState extends State<_StatusDialog> {
           child: const Text('Update status'),
         ),
       ],
+    );
+  }
+}
+
+class _ShiftChangeRequestsCard extends ConsumerStatefulWidget {
+  const _ShiftChangeRequestsCard();
+
+  @override
+  ConsumerState<_ShiftChangeRequestsCard> createState() =>
+      _ShiftChangeRequestsCardState();
+}
+
+class _ShiftChangeRequestsCardState
+    extends ConsumerState<_ShiftChangeRequestsCard> {
+  late Future<List<ShiftChangeRequestRecord>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref.read(adminRepositoryProvider).fetchShiftChangeRequests();
+  }
+
+  void _reload() {
+    setState(() {
+      _future = ref.read(adminRepositoryProvider).fetchShiftChangeRequests();
+    });
+  }
+
+  Future<void> _review(ShiftChangeRequestRecord request, bool approve) async {
+    try {
+      final refreshed = await ref
+          .read(adminRepositoryProvider)
+          .reviewShiftChangeRequest(requestId: request.id, approve: approve);
+      if (!mounted) return;
+      setState(() => _future = Future.value(refreshed));
+      showInfo(
+        context,
+        approve ? 'Shift change approved.' : 'Shift change rejected.',
+      );
+    } catch (error) {
+      if (mounted) showError(context, error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<ShiftChangeRequestRecord>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return DataCard(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Text(friendlyError(snapshot.error!)),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const DataCard(
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+        final requests = snapshot.data!;
+        return DataCard(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Shift change requests (${requests.length})',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Refresh',
+                      onPressed: _reload,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (requests.isEmpty)
+                  const Text('No pending shift change requests.')
+                else
+                  for (final request in requests)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${request.driverName}'
+                              '${request.plateNumber == null ? '' : ' · ${request.plateNumber}'}'
+                              ' → ${request.requestedShiftLabel ?? request.requestedShiftId}'
+                              '${request.requestedWindow}',
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _review(request, true),
+                            child: const Text('Approve'),
+                          ),
+                          TextButton(
+                            onPressed: () => _review(request, false),
+                            child: const Text('Reject'),
+                          ),
+                        ],
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

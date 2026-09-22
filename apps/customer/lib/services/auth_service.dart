@@ -41,12 +41,38 @@ class AuthService {
     return PhoneUtils.toAuthEmail(normalized);
   }
 
+  /// Pre-login gate: surfaces friendly messages for pending / deactivated
+  /// accounts before Supabase rejects the credentials with a raw banned error.
+  Future<void> _assertLoginAllowed(String mobile) async {
+    try {
+      final raw = await _client.rpc(
+        'get_login_status',
+        params: {
+          'p_role': 'commuter',
+          'p_login': PhoneUtils.normalize(mobile),
+        },
+      );
+      if (raw is Map && raw['allowed'] == false) {
+        throw AuthFlowException(
+          (raw['message'] as String?)?.trim().isNotEmpty == true
+              ? raw['message'] as String
+              : 'This account cannot sign in right now.',
+        );
+      }
+    } on AuthFlowException {
+      rethrow;
+    } catch (_) {
+      // RPC missing or network hiccup — fall through to the real sign-in.
+    }
+  }
+
   /// Phone sign-in. Account must be admin-approved (active).
   Future<AuthResponse> login({
     required String mobile,
     required String password,
   }) async {
     try {
+      await _assertLoginAllowed(mobile);
       final email = await _resolveLoginEmail(mobile);
       final response = await _client.auth.signInWithPassword(
         email: email,

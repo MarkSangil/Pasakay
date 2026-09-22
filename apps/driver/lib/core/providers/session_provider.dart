@@ -110,7 +110,8 @@ class SessionController extends AsyncNotifier<Driver?> {
     }
   }
 
-  /// Session may include active + suspended. Deactivated / pending cannot stay signed in.
+  /// Only active drivers may stay signed in. Suspended is replaced by
+  /// deactivated; pending cannot sign in.
   Future<Driver?> _requireUsableSession(Driver? driver) async {
     if (driver == null) {
       if (ref.read(authServiceProvider).currentUser != null) {
@@ -118,7 +119,7 @@ class SessionController extends AsyncNotifier<Driver?> {
       }
       return null;
     }
-    if (driver.status == 'active' || driver.status == 'suspended') {
+    if (driver.status == 'active') {
       return driver;
     }
     await ref.read(authServiceProvider).logout();
@@ -127,7 +128,7 @@ class SessionController extends AsyncNotifier<Driver?> {
 
   Future<Driver?> _requireLoginAllowed(Driver? driver) async {
     if (driver == null) return null;
-    if (driver.status == 'active' || driver.status == 'suspended') {
+    if (driver.status == 'active') {
       return driver;
     }
     await ref.read(authServiceProvider).logout();
@@ -139,7 +140,7 @@ class SessionController extends AsyncNotifier<Driver?> {
     return switch (status) {
       'pending_verification' =>
         'Your account is waiting for an administrator to visually verify your license.$detail',
-      'deactivated' => 'Your account has been deactivated.$detail',
+      'deactivated' || 'suspended' => 'Your account has been deactivated.$detail',
       _ => 'This account cannot sign in.$detail',
     };
   }
@@ -193,8 +194,7 @@ final pushRegistrationProvider = Provider<void>((ref) {
         push.onInboxChanged = () {
           ref.read(bookingsRefreshProvider.notifier).bump();
         };
-        if (driver != null &&
-            (driver.status == 'active' || driver.status == 'suspended')) {
+        if (driver != null && driver.status == 'active') {
           await Future<void>.delayed(const Duration(milliseconds: 400));
           await push.startForDriver(driver.id);
         } else if (previous?.value != null && driver == null) {

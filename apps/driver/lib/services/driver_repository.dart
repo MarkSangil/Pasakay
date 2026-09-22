@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/booking.dart';
 import '../models/driver.dart';
 import '../models/review.dart';
+import '../models/shift.dart';
 import '../models/terminal.dart';
 import 'supabase_config.dart';
 
@@ -27,6 +28,32 @@ class DriverRepository {
     return (rows as List)
         .map((e) => Terminal.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+  }
+
+  Future<List<Shift>> fetchShifts() async {
+    final rows =
+        await _client.from('shifts').select().order('shift_start_time');
+    return (rows as List)
+        .map((e) => Shift.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  /// Pending (or latest) shift-change request for the signed-in driver, if any.
+  Future<Map<String, dynamic>?> fetchMyShiftChangeRequest() async {
+    final raw = await _client.rpc('get_my_shift_change_request');
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is List && raw.isNotEmpty && raw.first is Map) {
+      return Map<String, dynamic>.from(raw.first as Map);
+    }
+    return null;
+  }
+
+  /// Asks admin to move this driver to [shiftId]. Approved via admin app.
+  Future<void> requestShiftChange(String shiftId) async {
+    await _client.rpc(
+      'request_driver_shift_change',
+      params: {'p_shift_id': shiftId},
+    );
   }
 
   Future<DriverShift?> fetchTodaysShift(String driverId) async {
@@ -142,7 +169,7 @@ class DriverRepository {
   Future<Map<String, int>> fetchBookingSettings() async {
     final raw = await _client.rpc('get_booking_settings');
     final map = Map<String, dynamic>.from(raw as Map);
-    final dispute = (map['dispute_window_minutes'] as num?)?.toInt() ?? 20;
+    final dispute = (map['dispute_window_minutes'] as num?)?.toInt() ?? 60;
     setDisputeWindowMinutes(dispute);
     return {
       'dispute_window_minutes': dispute,

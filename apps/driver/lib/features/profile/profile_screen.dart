@@ -7,7 +7,9 @@ import '../../core/providers/session_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
+import '../../models/shift.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/legal_dialog.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -101,11 +103,6 @@ class ProfileScreen extends ConsumerWidget {
                       value: PhoneUtils.display(driver.mobileNumber),
                     ),
                     _InfoRow(
-                      icon: Icons.timelapse_rounded,
-                      label: 'Years of Service',
-                      value: '${driver.yearsOfService} years',
-                    ),
-                    _InfoRow(
                       icon: Icons.star_outline_rounded,
                       label: 'Designated Terminal',
                       value: driver.assignedTerminal?.name ?? 'Not assigned',
@@ -116,14 +113,9 @@ class ProfileScreen extends ConsumerWidget {
                       value: driver.currentTerminal?.name ?? 'Not set',
                       onTap: () => context.push('/terminal'),
                     ),
-                    _InfoRow(
-                      icon: Icons.schedule_outlined,
-                      label: 'Operating Schedule',
-                      value: driver.onShift
-                          ? 'On shift now'
-                          : (driver.assignedTerminal?.name != null
-                              ? 'Assigned shift'
-                              : 'Not assigned'),
+                    _OperatingScheduleRow(
+                      shiftId: driver.shiftId,
+                      onShift: driver.onShift,
                     ),
                     const SizedBox(height: 12),
                     TextButton.icon(
@@ -135,6 +127,62 @@ class ProfileScreen extends ConsumerWidget {
                       onPressed: () => _editNotificationPrefs(context, ref, driver.id),
                       icon: const Icon(Icons.notifications_outlined),
                       label: const Text('Notification preferences'),
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.support_agent_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        'Contact Administrator',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: const Text('pasakay06@gmail.com'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => showLegalDialog(
+                        context,
+                        initialTab: LegalTab.contact,
+                      ),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.description_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        'Terms and Conditions',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => showLegalDialog(
+                        context,
+                        initialTab: LegalTab.terms,
+                      ),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.privacy_tip_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        'Privacy Policy',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => showLegalDialog(
+                        context,
+                        initialTab: LegalTab.privacy,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     OutlinedButton(
@@ -371,6 +419,150 @@ class _PasswordChange {
   const _PasswordChange(this.current, this.next);
   final String current;
   final String next;
+}
+
+/// Shows the assigned shift block and lets the driver request a change
+/// (requires admin approval before it takes effect).
+class _OperatingScheduleRow extends ConsumerStatefulWidget {
+  const _OperatingScheduleRow({required this.shiftId, required this.onShift});
+
+  final String? shiftId;
+  final bool onShift;
+
+  @override
+  ConsumerState<_OperatingScheduleRow> createState() =>
+      _OperatingScheduleRowState();
+}
+
+class _OperatingScheduleRowState extends ConsumerState<_OperatingScheduleRow> {
+  List<Shift> _shifts = const [];
+  Map<String, dynamic>? _pending;
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_load);
+  }
+
+  Future<void> _load() async {
+    final repo = ref.read(driverRepositoryProvider);
+    try {
+      final results = await Future.wait([
+        repo.fetchShifts(),
+        repo.fetchMyShiftChangeRequest(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _shifts = results[0] as List<Shift>;
+        _pending = results[1] as Map<String, dynamic>?;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  String get _currentLabel {
+    final id = widget.shiftId;
+    if (id == null) return 'Not assigned';
+    for (final s in _shifts) {
+      if (s.id == id) return s.label;
+    }
+    return 'Assigned shift';
+  }
+
+  String get _value {
+    if (_loading) return 'Loading…';
+    if (_pending?['hasPendingRequest'] == true) {
+      final label = _pending?['requestedShiftLabel']?.toString();
+      return 'Change pending${label == null || label.isEmpty ? '' : ' → $label'}';
+    }
+    if (widget.onShift) return 'On shift now • $_currentLabel';
+    return _currentLabel;
+  }
+
+  Future<void> _openChangeDialog() async {
+    if (_busy || _loading) return;
+    if (_pending?['hasPendingRequest'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'A shift change request is already waiting for admin approval.',
+          ),
+        ),
+      );
+      return;
+    }
+    final options = _shifts.where((s) => s.id != widget.shiftId).toList();
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No other shifts are available.')),
+      );
+      return;
+    }
+    final selected = await showDialog<Shift>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Request shift change'),
+        content: SizedBox(
+          width: 340,
+          child: ListView(
+            shrinkWrap: true,
+            children: options
+                .map(
+                  (s) => RadioListTile<Shift>(
+                    title: Text(s.label),
+                    value: s,
+                    groupValue: null,
+                    onChanged: (v) => Navigator.pop(context, v),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(driverRepositoryProvider)
+          .requestShiftChange(selected.id);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shift change request sent. Waiting for admin approval.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AuthValidators.friendlyError(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _InfoRow(
+      icon: Icons.schedule_outlined,
+      label: 'Operating Schedule',
+      value: _value,
+      onTap: _openChangeDialog,
+    );
+  }
 }
 
 class _ChangePasswordDialog extends StatefulWidget {
