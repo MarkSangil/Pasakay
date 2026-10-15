@@ -271,6 +271,7 @@ begin
         d.status::text as account_status,
         case
           when s.session_id is not null
+            and s.ended_at is null
             and (now() - s.last_heartbeat_at) <= make_interval(secs => v_timeout)
             and d.status = 'active'
             then 'active_now'
@@ -283,6 +284,7 @@ begin
         lb.last_beat as last_seen,
         case
           when s.session_id is not null
+            and s.ended_at is null
             and (now() - s.last_heartbeat_at) <= make_interval(secs => v_timeout)
             and d.status = 'active'
             then greatest(0, extract(
@@ -292,6 +294,7 @@ begin
         end as current_active_seconds,
         case
           when s.session_id is not null
+            and s.ended_at is null
             and (now() - s.last_heartbeat_at) <= make_interval(secs => v_timeout)
             and d.status = 'active' then 0
           when s.session_id is null and lb.last_beat is null then 3
