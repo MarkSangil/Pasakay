@@ -67,7 +67,7 @@ abstract final class LegalContent {
     ),
     LegalSection(
       'Driver Responsibilities',
-      'Registered SSLODA drivers agree to:\n'
+      'Registered SSLTODA drivers agree to:\n'
           '• Provide accurate personal information.\n'
           '• Maintain updated operating schedules.\n'
           '• Respond professionally to commuters.\n'
@@ -204,8 +204,6 @@ abstract final class LegalContent {
           'To allow commuters and authorized representatives to contact the driver regarding ride coordination, availability, and other transportation-related concerns.\n\n'
           '• Email (optional)\n'
           'To provide an alternative communication channel for account-related notifications, updates, and other relevant information.\n'
-          '• Driver\'s License Number\n'
-          'To verify the driver\'s identity and confirm their driving credentials with authorized personnel, when necessary. This information should be restricted to authorized personnel and not publicly displayed.\n'
           '• Plate Number\n'
           'To help commuters identify the vehicle assigned to the registered driver and distinguish it from other vehicles.\n'
           '• TODA Plate Number\n'
@@ -216,7 +214,7 @@ abstract final class LegalContent {
           'To provide each registered driver with a unique account identifier for securely accessing the PASAKAY application.\n'
           '• Encrypted Password\n'
           'To protect the driver\'s account from unauthorized access. Passwords should be stored using secure password hashing rather than reversible encryption.\n\n'
-          'Note: Driver information displayed within PASAKAY is provided by registered SSLTODA drivers or authorized SSLODA representatives with their knowledge and consent solely for transportation-related communication.',
+          'Note: Driver information displayed within PASAKAY is provided by registered SSLTODA drivers or authorized SSLTODA representatives with their knowledge and consent solely for transportation-related communication.',
     ),
     LegalSection(
       'Information Collected Automatically',
