@@ -4,11 +4,12 @@ import 'package:pasakay_admin/models/admin_models.dart';
 
 void main() {
   group('DriverFormValidators', () {
-    test('requires name, license, and plate', () {
+    test('requires name, TODA plate, and plate', () {
       expect(DriverFormValidators.requiredName(''), isNotNull);
       expect(DriverFormValidators.requiredName('Juan'), isNull);
-      expect(DriverFormValidators.licenseNumber(''), isNotNull);
-      expect(DriverFormValidators.licenseNumber('N01-12-345678'), isNull);
+      expect(DriverFormValidators.todaPlateNumber(''), isNotNull);
+      expect(DriverFormValidators.todaPlateNumber('   '), isNotNull);
+      expect(DriverFormValidators.todaPlateNumber('SSLTODA No. 00876'), isNull);
       expect(DriverFormValidators.plateNumber(''), isNotNull);
       expect(DriverFormValidators.plateNumber('ABC123'), isNull);
     });
@@ -21,7 +22,10 @@ void main() {
 
     test('requires password of at least 8 characters when creating', () {
       expect(DriverFormValidators.password('short', required: true), isNotNull);
-      expect(DriverFormValidators.password('Password123!', required: true), isNull);
+      expect(
+        DriverFormValidators.password('Password123!', required: true),
+        isNull,
+      );
       expect(DriverFormValidators.password('', required: false), isNull);
     });
 
@@ -37,7 +41,7 @@ void main() {
         'driver_id': 'a0000000-0000-4000-8000-000000000001',
         'full_name': 'Juan Dela Cruz',
         'contact_number': '09171234567',
-        'driver_license_number': 'N01-12-345678',
+        'toda_number': 'SSLTODA No. 00876',
         'plate_number': 'ABC123',
         'username': '09171234567',
         'terminal_id': 't1',
@@ -62,6 +66,7 @@ void main() {
 
   test('status labels stay inside the scoped account actions', () {
     expect(statusLabel('pending_verification'), 'Pending verification');
-    expect(statusLabel('suspended'), 'Suspended');
+    // Suspended was replaced by Deactivated (same effect: blocked login).
+    expect(statusLabel('suspended'), 'Deactivated');
   });
 }

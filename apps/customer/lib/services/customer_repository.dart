@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,22 +10,31 @@ import 'supabase_config.dart';
 
 class CustomerRepository {
   CustomerRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseConfig.client;
+    : _client = client ?? SupabaseConfig.client;
 
-  final SupabaseClient _client;
+  /// Test-only constructor: leaves [_client] uninitialized. Only usable in
+  /// tests that override every exercised method (any real client use throws).
+  @visibleForTesting
+  CustomerRepository.forTest();
+
+  late final SupabaseClient _client;
   static const _recentKey = 'pasakay_customer_recent_contacts';
 
   Future<List<Terminal>> fetchTerminals() async {
-    final rows =
-        await _client.from('terminals').select().order('terminal_name');
+    final rows = await _client
+        .from('terminals')
+        .select()
+        .order('terminal_name');
     return (rows as List)
         .map((e) => Terminal.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
   Future<List<Shift>> fetchShifts() async {
-    final rows =
-        await _client.from('shifts').select().order('shift_start_time');
+    final rows = await _client
+        .from('shifts')
+        .select()
+        .order('shift_start_time');
     return (rows as List)
         .map((e) => Shift.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
@@ -36,10 +46,7 @@ class CustomerRepository {
   }) async {
     final raw = await _client.rpc(
       'list_terminal_shift_drivers',
-      params: {
-        'p_terminal_id': terminalId,
-        'p_shift_id': shiftId,
-      },
+      params: {'p_terminal_id': terminalId, 'p_shift_id': shiftId},
     );
     final rows = raw is List ? raw : const [];
     return rows
@@ -144,10 +151,10 @@ class CustomerRepository {
     required String token,
     required String platform,
   }) async {
-    await _client.rpc('register_commuter_device_token', params: {
-      'p_token': token,
-      'p_platform': platform,
-    });
+    await _client.rpc(
+      'register_commuter_device_token',
+      params: {'p_token': token, 'p_platform': platform},
+    );
   }
 
   Future<void> deleteDeviceToken({
@@ -349,7 +356,9 @@ class CustomerRepository {
         .eq('is_read', false);
   }
 
-  Future<DriverRequestContext> fetchDriverRequestContext(String driverId) async {
+  Future<DriverRequestContext> fetchDriverRequestContext(
+    String driverId,
+  ) async {
     final raw = await _client.rpc(
       'get_driver_request_context',
       params: {'p_driver_id': driverId},

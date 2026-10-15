@@ -106,7 +106,6 @@ class _ShiftsScreenState extends ConsumerState<ShiftsScreen> {
             driverId: driver.id,
             fullName: driver.fullName,
             contactNumber: driver.contactNumber,
-            licenseNumber: driver.licenseNumber,
             plateNumber: driver.plateNumber,
             username: driver.username,
             terminalId: driver.terminalId,

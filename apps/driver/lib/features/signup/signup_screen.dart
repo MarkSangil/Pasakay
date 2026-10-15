@@ -27,7 +27,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
-  final _licenseCtrl = TextEditingController();
+  final _todaCtrl = TextEditingController();
   final _plateCtrl = TextEditingController();
 
   bool _obscurePass = true;
@@ -51,7 +51,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       if (list.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No terminals available yet. Ask an admin to add one.'),
+            content: Text(
+              'No terminals available yet. Ask an admin to add one.',
+            ),
           ),
         );
       }
@@ -74,7 +76,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
-    _licenseCtrl.dispose();
+    _todaCtrl.dispose();
     _plateCtrl.dispose();
     super.dispose();
   }
@@ -99,12 +101,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
     setState(() => _submitting = true);
     try {
-      await ref.read(sessionProvider.notifier).signUp(
+      await ref
+          .read(sessionProvider.notifier)
+          .signUp(
             fullName: _nameCtrl.text.trim(),
             mobile: _mobileCtrl.text.trim(),
             email: _emailCtrl.text.trim(),
             password: _passwordCtrl.text,
-            licenseNumber: _licenseCtrl.text.trim(),
+            todaNumber: _todaCtrl.text.trim(),
             plateNumber: _plateCtrl.text.trim(),
             assignedTerminalId: _terminalId!,
           );
@@ -145,7 +149,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         content: Text(
           message ??
               'Your driver account was created and is waiting for administrator verification. '
-              'An admin must verify your license before you can sign in with your mobile number.',
+                  'An admin must verify your TODA plate before you can sign in with your mobile number.',
         ),
         actions: [
           FilledButton(
@@ -192,7 +196,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'We save your email on the profile. After an administrator verifies your license, sign in with your mobile number.',
+                    'We save your email on the profile. After an administrator verifies your TODA plate, sign in with your mobile number.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.plusJakartaSans(
                       color: AppColors.textSecondary,
@@ -262,13 +266,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
-                    controller: _licenseCtrl,
-                    hint: "Driver's License (D00-00-000000)",
+                    controller: _todaCtrl,
+                    hint: 'TODA Plate Number (e.g. SSLTODA No. 00876)',
                     icon: Icons.badge_outlined,
                     textInputAction: TextInputAction.next,
-                    maxLength: 13,
-                    inputFormatters: const [DriverLicenseFormatter()],
-                    validator: AuthValidators.license,
+                    maxLength: 32,
+                    validator: AuthValidators.todaPlate,
                   ),
                   const SizedBox(height: 12),
                   AppTextField(

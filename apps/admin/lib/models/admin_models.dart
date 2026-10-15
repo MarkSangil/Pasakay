@@ -1,18 +1,18 @@
 import 'package:intl/intl.dart';
 
 String statusLabel(String status) => switch (status) {
-      'pending_verification' => 'Pending verification',
-      'active' => 'Active',
-      // Suspended was replaced by Deactivated (same effect: blocked login).
-      'suspended' => 'Deactivated',
-      'deactivated' => 'Deactivated',
-      'received' => 'Received',
-      'in_progress' => 'In progress',
-      'completed' => 'Completed',
-      'denied' => 'Denied',
-      'retained' => 'Retained',
-      _ => status,
-    };
+  'pending_verification' => 'Pending verification',
+  'active' => 'Active',
+  // Suspended was replaced by Deactivated (same effect: blocked login).
+  'suspended' => 'Deactivated',
+  'deactivated' => 'Deactivated',
+  'received' => 'Received',
+  'in_progress' => 'In progress',
+  'completed' => 'Completed',
+  'denied' => 'Denied',
+  'retained' => 'Retained',
+  _ => status,
+};
 
 String formatWhen(DateTime? value) {
   if (value == null) return '—';
@@ -200,36 +200,37 @@ class DriverRecord {
     required this.id,
     required this.fullName,
     required this.contactNumber,
-    required this.licenseNumber,
     required this.plateNumber,
     required this.username,
     required this.terminalId,
     required this.shiftId,
     required this.status,
-    required this.licenseVerified,
+    required this.todaVerified,
     this.todaNumber,
     this.statusReason,
     this.terminalName,
     this.shiftLabel,
-    this.licenseVerifiedAt,
+    this.todaVerifiedAt,
     this.createdAt,
   });
 
   final String id;
   final String fullName;
   final String contactNumber;
-  final String licenseNumber;
   final String plateNumber;
   final String? todaNumber;
   final String username;
   final String terminalId;
   final String shiftId;
   final String status;
-  final bool licenseVerified;
+
+  /// TODA-plate verification flag (server columns are still named
+  /// `license_verified*`; see the TODA-plate migration).
+  final bool todaVerified;
   final String? statusReason;
   final String? terminalName;
   final String? shiftLabel;
-  final DateTime? licenseVerifiedAt;
+  final DateTime? todaVerifiedAt;
   final DateTime? createdAt;
 
   factory DriverRecord.fromJson(Map<String, dynamic> json) {
@@ -247,18 +248,17 @@ class DriverRecord {
       id: json['driver_id'] as String,
       fullName: json['full_name'] as String? ?? '',
       contactNumber: json['contact_number'] as String? ?? '',
-      licenseNumber: json['driver_license_number'] as String? ?? '',
       plateNumber: json['plate_number'] as String? ?? '',
       todaNumber: json['toda_number'] as String?,
       username: json['username'] as String? ?? '',
       terminalId: json['terminal_id'] as String,
       shiftId: json['shift_id'] as String,
       status: json['status'] as String? ?? 'pending_verification',
-      licenseVerified: json['license_verified'] as bool? ?? false,
+      todaVerified: json['license_verified'] as bool? ?? false,
       statusReason: json['status_reason'] as String?,
       terminalName: terminalName,
       shiftLabel: shiftLabel,
-      licenseVerifiedAt: json['license_verified_at'] == null
+      todaVerifiedAt: json['license_verified_at'] == null
           ? null
           : DateTime.parse(json['license_verified_at'].toString()),
       createdAt: json['created_at'] == null
@@ -341,7 +341,8 @@ class ReviewRecord {
     final commuter = json['commuter'];
     final driver = json['driver'];
     if (commuter is Map) {
-      commuterName = (commuter['full_name'] ?? json['commuter_name']) as String?;
+      commuterName =
+          (commuter['full_name'] ?? json['commuter_name']) as String?;
     } else {
       commuterName = json['commuter_name'] as String?;
     }
@@ -473,7 +474,7 @@ class FlaggedBookingRecord {
       confirmedAt: DateTime.parse(json['confirmed_at'].toString()),
       flaggedAt: json['flagged_at'] == null
           ? (passengerReportedAt ??
-              DateTime.parse(json['confirmed_at'].toString()))
+                DateTime.parse(json['confirmed_at'].toString()))
           : DateTime.parse(json['flagged_at'].toString()),
       flagReason: json['flag_reason'] as String?,
       flagDetails: json['flag_details'] as String?,
@@ -632,8 +633,8 @@ class ShiftChangeRequestRecord {
   final String? requestedShiftEnd;
   final DateTime? createdAt;
 
-  String get requestedWindow => requestedShiftStart == null ||
-          requestedShiftEnd == null
+  String get requestedWindow =>
+      requestedShiftStart == null || requestedShiftEnd == null
       ? ''
       : ' (${formatClock(requestedShiftStart!)} – ${formatClock(requestedShiftEnd!)})';
 
@@ -670,13 +671,133 @@ class BookingSettings {
   final int reviewEligibleMinutes;
 
   factory BookingSettings.fromJson(Map<String, dynamic> json) {
-    int n(String key, int fallback) =>
-        (json[key] as num?)?.toInt() ?? fallback;
+    int n(String key, int fallback) => (json[key] as num?)?.toInt() ?? fallback;
     return BookingSettings(
       disputeWindowMinutes: n('dispute_window_minutes', 60),
       requestExpireMinutes: n('request_expire_minutes', 30),
       requestCooldownMinutes: n('request_cooldown_minutes', 30),
       reviewEligibleMinutes: n('review_eligible_minutes', 0),
+    );
+  }
+}
+
+/// Current foreground-activity state of one driver (admin list + detail).
+///
+/// States: `active_now` (open session, heartbeat within timeout, account
+/// active), `inactive` (stale or background-ended), `offline` (explicit
+/// logout, nothing after), `unknown` (no activity rows at all).
+class DriverActivityState {
+  const DriverActivityState({
+    required this.driverId,
+    required this.fullName,
+    required this.accountStatus,
+    required this.state,
+    this.lastSeen,
+    this.currentActiveSeconds,
+  });
+
+  final String driverId;
+  final String fullName;
+  final String accountStatus;
+  final String state;
+  final DateTime? lastSeen;
+  final int? currentActiveSeconds;
+
+  static DateTime? _dt(Object? v) =>
+      v == null ? null : DateTime.tryParse(v.toString());
+
+  factory DriverActivityState.fromJson(Map<String, dynamic> json) {
+    return DriverActivityState(
+      driverId: json['driver_id'] as String,
+      fullName: json['full_name'] as String? ?? 'Driver',
+      accountStatus: json['account_status'] as String? ?? 'unknown',
+      state: json['activity_state'] as String? ?? 'unknown',
+      lastSeen: _dt(json['last_seen']),
+      currentActiveSeconds: (json['current_active_seconds'] as num?)?.toInt(),
+    );
+  }
+
+  String get label => switch (state) {
+    'active_now' => 'Active now',
+    'inactive' => 'Inactive',
+    'offline' => 'Offline',
+    _ => 'Unknown',
+  };
+}
+
+/// One foreground span inside a usage summary period.
+class UsageSession {
+  const UsageSession({
+    required this.sessionId,
+    required this.startedAt,
+    this.endedAt,
+    this.endReason,
+    required this.beats,
+    this.foregroundSeconds,
+  });
+
+  final String sessionId;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final String? endReason;
+  final int beats;
+  final int? foregroundSeconds;
+
+  factory UsageSession.fromJson(Map<String, dynamic> json) {
+    return UsageSession(
+      sessionId: json['session_id'] as String,
+      startedAt: DateTime.parse(json['started_at'].toString()),
+      endedAt: json['ended_at'] == null
+          ? null
+          : DateTime.tryParse(json['ended_at'].toString()),
+      endReason: json['end_reason'] as String?,
+      beats: (json['beats'] as num?)?.toInt() ?? 0,
+      foregroundSeconds: (json['foreground_seconds'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// Totals for one driver over a reporting period. Foreground usage only:
+/// summed heartbeat-chain time, never login-to-logout spans.
+class DriverUsageSummary {
+  const DriverUsageSummary({
+    required this.totalForegroundSeconds,
+    required this.sessions,
+    required this.activeDays,
+    this.firstSeen,
+    this.lastSeen,
+    this.sessionsDetail = const [],
+  });
+
+  final int totalForegroundSeconds;
+  final int sessions;
+  final int activeDays;
+  final DateTime? firstSeen;
+  final DateTime? lastSeen;
+  final List<UsageSession> sessionsDetail;
+
+  factory DriverUsageSummary.fromJson(Map<String, dynamic> json) {
+    final detail = json['sessions_detail'];
+    return DriverUsageSummary(
+      totalForegroundSeconds:
+          (json['total_foreground_seconds'] as num?)?.toInt() ?? 0,
+      sessions: (json['sessions'] as num?)?.toInt() ?? 0,
+      activeDays: (json['active_days'] as num?)?.toInt() ?? 0,
+      firstSeen: json['first_seen'] == null
+          ? null
+          : DateTime.tryParse(json['first_seen'].toString()),
+      lastSeen: json['last_seen'] == null
+          ? null
+          : DateTime.tryParse(json['last_seen'].toString()),
+      sessionsDetail: detail is List
+          ? detail
+                .map(
+                  (e) => UsageSession.fromJson(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
+                .toList()
+          : const [],
     );
   }
 }
