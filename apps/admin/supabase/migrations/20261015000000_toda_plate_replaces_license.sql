@@ -333,12 +333,12 @@ create or replace function public.admin_create_driver(
   p_full_name text,
   p_contact_number text,
   p_license_number text default null,
-  p_plate_number text,
-  p_toda_number text,
-  p_username text,
-  p_password text,
-  p_terminal_id uuid,
-  p_shift_id uuid
+  p_plate_number text default null,
+  p_toda_number text default null,
+  p_username text default null,
+  p_password text default null,
+  p_terminal_id uuid default null,
+  p_shift_id uuid default null
 )
 returns uuid
 language plpgsql
@@ -445,11 +445,11 @@ create or replace function public.admin_update_driver(
   p_full_name text,
   p_contact_number text,
   p_license_number text default null,
-  p_plate_number text,
-  p_toda_number text,
-  p_username text,
-  p_terminal_id uuid,
-  p_shift_id uuid
+  p_plate_number text default null,
+  p_toda_number text default null,
+  p_username text default null,
+  p_terminal_id uuid default null,
+  p_shift_id uuid default null
 )
 returns void
 language plpgsql
