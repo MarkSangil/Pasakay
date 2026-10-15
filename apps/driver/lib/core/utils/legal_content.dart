@@ -8,6 +8,19 @@ abstract final class LegalContent {
   static const contactIntro =
       'For concerns, reports, or inquiries, please email us at:';
 
+  /// Research team contacts shown in the Contact tab (first entry is the
+  /// contact person).
+  static const researchContacts = <ResearchContact>[
+    ResearchContact(
+      'Lady Sofia Garcia (Contact Person)',
+      'ladysofia.garcia.21@gmail.com',
+    ),
+    ResearchContact('Research Team', 'freltrasona0609@gmail.com'),
+    ResearchContact('Research Team', 'stephanie121sadie@gmail.com'),
+    ResearchContact('Research Team', 'arcegamark0414@gmail.com'),
+    ResearchContact('Research Team', 'hanaaudreedominguez@gmail.com'),
+  ];
+
   static const terms = <LegalSection>[
     LegalSection(
       'Acceptance of Terms',
@@ -303,4 +316,11 @@ class LegalSection {
 
   final String title;
   final String body;
+}
+
+class ResearchContact {
+  const ResearchContact(this.name, this.email);
+
+  final String name;
+  final String email;
 }

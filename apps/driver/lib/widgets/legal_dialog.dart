@@ -160,7 +160,89 @@ class _ContactTab extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          Text(
+            'Research Team',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'For research-related concerns, you may also reach the researchers below.',
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final contact in LegalContent.researchContacts)
+            _ResearchContactRow(contact: contact),
         ],
+      ),
+    );
+  }
+}
+
+class _ResearchContactRow extends StatelessWidget {
+  const _ResearchContactRow({required this.contact});
+
+  final ResearchContact contact;
+
+  Future<void> _email(BuildContext context) async {
+    final uri = Uri.parse(
+      'mailto:${contact.email}?subject=${Uri.encodeComponent('PASAKAY Concern')}',
+    );
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {
+      // Fall through to copy-to-clipboard.
+    }
+    if (!context.mounted) return;
+    await Clipboard.setData(ClipboardData(text: contact.email));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Email address copied to clipboard.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => _email(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            const Icon(Icons.email_outlined),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    contact.name,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    contact.email,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18),
+          ],
+        ),
       ),
     );
   }
