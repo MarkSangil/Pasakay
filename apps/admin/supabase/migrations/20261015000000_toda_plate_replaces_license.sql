@@ -131,7 +131,7 @@ create or replace function public.register_driver(
   p_mobile text,
   p_email text,
   p_password text,
-  p_license text,
+  p_license text default null,
   p_plate text,
   p_terminal_id uuid,
   p_toda text default null
