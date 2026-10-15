@@ -331,16 +331,16 @@ class _ConsentCheckboxesState extends State<ConsentCheckboxes> {
   void _notify() => widget.onChanged(_terms && _privacy && _data);
 
   TextStyle get _body => GoogleFonts.plusJakartaSans(
-        color: AppColors.textSecondary,
-        fontSize: 13,
-        height: 1.35,
-      );
+    color: AppColors.textSecondary,
+    fontSize: 13,
+    height: 1.35,
+  );
 
   TextStyle get _link => GoogleFonts.plusJakartaSans(
-        color: AppColors.primary,
-        fontWeight: FontWeight.w700,
-        fontSize: 13,
-      );
+    color: AppColors.primary,
+    fontWeight: FontWeight.w700,
+    fontSize: 13,
+  );
 
   @override
   Widget build(BuildContext context) {
