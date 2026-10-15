@@ -132,8 +132,8 @@ create or replace function public.register_driver(
   p_email text,
   p_password text,
   p_license text default null,
-  p_plate text,
-  p_terminal_id uuid,
+  p_plate text default null,
+  p_terminal_id uuid default null,
   p_toda text default null
 )
 returns uuid
