@@ -18,26 +18,19 @@ abstract final class DriverFormValidators {
     return null;
   }
 
-  static String? licenseNumber(String? value) {
-    if (value == null || value.trim().isEmpty) return 'License number is required';
-    return null;
-  }
-
   static String? plateNumber(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Plate number is required';
+    if (value == null || value.trim().isEmpty)
+      return 'Plate number is required';
     return null;
   }
 
-  /// Strict format check for NEW drivers: canonical `D00-00-000000`
-  /// (`D` + 10 digits after normalization). Not used on the edit form so
-  /// legacy rows (e.g. seed plate `123ABC`) can still be updated.
-  static String? licenseNumberFormat(String? value) {
-    final required = licenseNumber(value);
-    if (required != null) return required;
-    final v = _alnum(value).toUpperCase();
-    if (!RegExp(r'^[A-Z][0-9]{10}$').hasMatch(v)) {
-      return "Format: D00-00-000000 (e.g. D12-34-567890)";
-    }
+  /// TODA Plate Number: required on create and edit (completes legacy rows).
+  /// Freeform (e.g. `SSLTODA No. 00876`); no strict format, no uniqueness
+  /// check per business rules.
+  static String? todaPlateNumber(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return 'TODA Plate Number is required';
+    if (v.length < 2) return 'Enter a valid TODA Plate Number';
     return null;
   }
 
@@ -55,15 +48,6 @@ abstract final class DriverFormValidators {
 
   static String _alnum(String? value) =>
       (value ?? '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
-
-  static String? ssltodaNumber(String? value, {bool required = false}) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) {
-      return required ? 'SSLTODA number is required' : null;
-    }
-    if (v.length < 2) return 'Enter a valid SSLTODA number';
-    return null;
-  }
 
   static String? password(String? value, {required bool required}) {
     if (!required && (value == null || value.isEmpty)) return null;

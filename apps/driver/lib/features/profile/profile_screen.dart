@@ -25,214 +25,203 @@ class ProfileScreen extends ConsumerWidget {
       body: session.isLoading
           ? const Center(child: CircularProgressIndicator())
           : driver == null
-              ? const Center(child: Text('Not signed in'))
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-                  children: [
-                    Center(
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          CircleAvatar(
-                            radius: 58,
-                            backgroundColor: AppColors.border,
-                            backgroundImage: driver.avatarUrl != null
-                                ? NetworkImage(driver.avatarUrl!)
-                                : null,
-                            child: driver.avatarUrl == null
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 58,
-                                    color: AppColors.textMuted,
-                                  )
-                                : null,
+          ? const Center(child: Text('Not signed in'))
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+              children: [
+                Center(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      CircleAvatar(
+                        radius: 58,
+                        backgroundColor: AppColors.border,
+                        backgroundImage: driver.avatarUrl != null
+                            ? NetworkImage(driver.avatarUrl!)
+                            : null,
+                        child: driver.avatarUrl == null
+                            ? const Icon(
+                                Icons.person,
+                                size: 58,
+                                color: AppColors.textMuted,
+                              )
+                            : null,
+                      ),
+                      Positioned(
+                        right: 2,
+                        bottom: 2,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
                           ),
-                          Positioned(
-                            right: 2,
-                            bottom: 2,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.photo_camera_outlined,
-                                size: 15,
-                                color: Colors.white,
-                              ),
-                            ),
+                          child: const Icon(
+                            Icons.photo_camera_outlined,
+                            size: 15,
+                            color: Colors.white,
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      driver.fullName,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      driver.todaNumber ?? 'SSLTODA No. —',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    _InfoRow(
-                      icon: Icons.airport_shuttle_outlined,
-                      label: 'Plate Number',
-                      value: driver.plateNumber ?? '—',
-                    ),
-                    _InfoRow(
-                      icon: Icons.phone_outlined,
-                      label: 'Mobile Number',
-                      value: PhoneUtils.display(driver.mobileNumber),
-                    ),
-                    _InfoRow(
-                      icon: Icons.star_outline_rounded,
-                      label: 'Designated Terminal',
-                      value: driver.assignedTerminal?.name ?? 'Not assigned',
-                    ),
-                    _InfoRow(
-                      icon: Icons.location_on_outlined,
-                      label: 'Current Location',
-                      value: driver.currentTerminal?.name ?? 'Not set',
-                      onTap: () => context.push('/terminal'),
-                    ),
-                    _OperatingScheduleRow(
-                      shiftId: driver.shiftId,
-                      onShift: driver.onShift,
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton.icon(
-                      onPressed: () => _enablePush(context, ref, driver.id),
-                      icon: const Icon(Icons.notifications_active_outlined),
-                      label: const Text('Enable push notifications'),
-                    ),
-                    TextButton.icon(
-                      onPressed: () => _editNotificationPrefs(context, ref, driver.id),
-                      icon: const Icon(Icons.notifications_outlined),
-                      label: const Text('Notification preferences'),
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.support_agent_outlined,
-                        color: AppColors.primary,
-                      ),
-                      title: Text(
-                        'Contact Administrator',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      subtitle: const Text('pasakay06@gmail.com'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => showLegalDialog(
-                        context,
-                        initialTab: LegalTab.contact,
-                      ),
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.description_outlined,
-                        color: AppColors.primary,
-                      ),
-                      title: Text(
-                        'Terms and Conditions',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => showLegalDialog(
-                        context,
-                        initialTab: LegalTab.terms,
-                      ),
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.privacy_tip_outlined,
-                        color: AppColors.primary,
-                      ),
-                      title: Text(
-                        'Privacy Policy',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => showLegalDialog(
-                        context,
-                        initialTab: LegalTab.privacy,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.5,
-                        ),
-                        minimumSize: const Size.fromHeight(52),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => _changePassword(context, ref),
-                      child: Text(
-                        'Change Password',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.danger,
-                        side: const BorderSide(
-                          color: AppColors.danger,
-                          width: 1.5,
-                        ),
-                        minimumSize: const Size.fromHeight(52),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () async {
-                        await ref.read(sessionProvider.notifier).logout();
-                        if (context.mounted) context.go('/login');
-                      },
-                      child: Text(
-                        'Log Out',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  driver.fullName,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  driver.todaNumber ?? 'TODA Plate No. —',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                _InfoRow(
+                  icon: Icons.airport_shuttle_outlined,
+                  label: 'Plate Number',
+                  value: driver.plateNumber ?? '—',
+                ),
+                _InfoRow(
+                  icon: Icons.phone_outlined,
+                  label: 'Mobile Number',
+                  value: PhoneUtils.display(driver.mobileNumber),
+                ),
+                _InfoRow(
+                  icon: Icons.star_outline_rounded,
+                  label: 'Designated Terminal',
+                  value: driver.assignedTerminal?.name ?? 'Not assigned',
+                ),
+                _InfoRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Current Location',
+                  value: driver.currentTerminal?.name ?? 'Not set',
+                  onTap: () => context.push('/terminal'),
+                ),
+                _OperatingScheduleRow(
+                  shiftId: driver.shiftId,
+                  onShift: driver.onShift,
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => _enablePush(context, ref, driver.id),
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Enable push notifications'),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      _editNotificationPrefs(context, ref, driver.id),
+                  icon: const Icon(Icons.notifications_outlined),
+                  label: const Text('Notification preferences'),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.support_agent_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    'Contact Administrator',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text('pasakay06@gmail.com'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () =>
+                      showLegalDialog(context, initialTab: LegalTab.contact),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.description_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    'Terms and Conditions',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () =>
+                      showLegalDialog(context, initialTab: LegalTab.terms),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.privacy_tip_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    'Privacy Policy',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () =>
+                      showLegalDialog(context, initialTab: LegalTab.privacy),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
+                    ),
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => _changePassword(context, ref),
+                  child: Text(
+                    'Change Password',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger, width: 1.5),
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () async {
+                    await ref.read(sessionProvider.notifier).logout();
+                    if (context.mounted) context.go('/login');
+                  },
+                  child: Text(
+                    'Log Out',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -243,7 +232,9 @@ class ProfileScreen extends ConsumerWidget {
     );
     if (result == null || !context.mounted) return;
     try {
-      await ref.read(sessionProvider.notifier).changePassword(
+      await ref
+          .read(sessionProvider.notifier)
+          .changePassword(
             currentPassword: result.current,
             newPassword: result.next,
           );
@@ -255,7 +246,9 @@ class ProfileScreen extends ConsumerWidget {
     } catch (err) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+            content: Text(err.toString().replaceFirst('Exception: ', '')),
+          ),
         );
       }
     }
@@ -356,9 +349,8 @@ class ProfileScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -534,21 +526,21 @@ class _OperatingScheduleRowState extends ConsumerState<_OperatingScheduleRow> {
     if (selected == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(driverRepositoryProvider)
-          .requestShiftChange(selected.id);
+      await ref.read(driverRepositoryProvider).requestShiftChange(selected.id);
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Shift change request sent. Waiting for admin approval.'),
+          content: Text(
+            'Shift change request sent. Waiting for admin approval.',
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AuthValidators.friendlyError(e))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(AuthValidators.friendlyError(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -600,9 +592,10 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               TextFormField(
                 controller: _current,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Current password'),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Required' : null,
+                decoration: const InputDecoration(
+                  labelText: 'Current password',
+                ),
+                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
               ),
               TextFormField(
                 controller: _next,
@@ -613,10 +606,10 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               TextFormField(
                 controller: _confirm,
                 obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'Confirm new password'),
-                validator: (v) =>
-                    AuthValidators.confirmPassword(v, _next.text),
+                decoration: const InputDecoration(
+                  labelText: 'Confirm new password',
+                ),
+                validator: (v) => AuthValidators.confirmPassword(v, _next.text),
               ),
             ],
           ),
@@ -630,10 +623,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
         FilledButton(
           onPressed: () {
             if (!_formKey.currentState!.validate()) return;
-            Navigator.pop(
-              context,
-              _PasswordChange(_current.text, _next.text),
-            );
+            Navigator.pop(context, _PasswordChange(_current.text, _next.text));
           },
           child: const Text('Update'),
         ),

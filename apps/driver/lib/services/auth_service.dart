@@ -7,7 +7,8 @@ import '../models/driver.dart';
 import 'supabase_config.dart';
 
 class AuthService {
-  AuthService({SupabaseClient? client}) : _client = client ?? SupabaseConfig.client;
+  AuthService({SupabaseClient? client})
+    : _client = client ?? SupabaseConfig.client;
 
   final SupabaseClient _client;
 
@@ -23,19 +24,14 @@ class AuthService {
     try {
       final raw = await _client.rpc(
         'resolve_auth_email',
-        params: {
-          'p_role': 'driver',
-          'p_login': normalized,
-        },
+        params: {'p_role': 'driver', 'p_login': normalized},
       );
       if (raw is String && raw.trim().isNotEmpty) {
         return raw.trim().toLowerCase();
       }
     } on PostgrestException catch (e) {
       throw AuthFlowException(
-        e.message.isNotEmpty
-            ? e.message
-            : AuthValidators.friendlyAuthError(e),
+        e.message.isNotEmpty ? e.message : AuthValidators.friendlyAuthError(e),
       );
     }
     return PhoneUtils.toAuthEmail(normalized);
@@ -47,10 +43,7 @@ class AuthService {
     try {
       final raw = await _client.rpc(
         'get_login_status',
-        params: {
-          'p_role': 'driver',
-          'p_login': PhoneUtils.normalize(mobile),
-        },
+        params: {'p_role': 'driver', 'p_login': PhoneUtils.normalize(mobile)},
       );
       if (raw is Map && raw['allowed'] == false) {
         throw AuthFlowException(
@@ -90,24 +83,27 @@ class AuthService {
     required String mobile,
     required String email,
     required String password,
-    required String licenseNumber,
+    required String todaNumber,
     required String plateNumber,
     required String assignedTerminalId,
   }) async {
     final normalized = PhoneUtils.normalize(mobile);
     try {
       final trimmedEmail = email.trim().toLowerCase();
-      await _client.rpc('register_driver', params: {
-        'p_full_name': fullName.trim(),
-        'p_mobile': normalized,
-        'p_email': trimmedEmail.isEmpty ? null : trimmedEmail,
-        'p_password': password,
-        'p_license': licenseNumber.trim(),
-        'p_plate': plateNumber.trim().toUpperCase(),
-        'p_terminal_id': assignedTerminalId,
-      });
+      await _client.rpc(
+        'register_driver',
+        params: {
+          'p_full_name': fullName.trim(),
+          'p_mobile': normalized,
+          'p_email': trimmedEmail.isEmpty ? null : trimmedEmail,
+          'p_password': password,
+          'p_toda': AuthValidators.normalizeTodaPlate(todaNumber),
+          'p_plate': plateNumber.trim().toUpperCase(),
+          'p_terminal_id': assignedTerminalId,
+        },
+      );
       throw AuthFlowException(
-        'Account created. An administrator must verify your license before you can sign in.',
+        'Account created. An administrator must verify your TODA plate before you can sign in.',
         isSuccessInfo: true,
       );
     } on AuthFlowException {
@@ -116,9 +112,7 @@ class AuthService {
       throw AuthFlowException(AuthValidators.friendlyAuthError(e));
     } on PostgrestException catch (e) {
       throw AuthFlowException(
-        e.message.isNotEmpty
-            ? e.message
-            : AuthValidators.friendlyAuthError(e),
+        e.message.isNotEmpty ? e.message : AuthValidators.friendlyAuthError(e),
       );
     }
   }
@@ -221,16 +215,18 @@ class AuthService {
     if (user == null) return;
 
     try {
-      await _client.from('drivers').update({
-        'current_terminal_id': terminalId,
-      }).eq('driver_id', user.id);
+      await _client
+          .from('drivers')
+          .update({'current_terminal_id': terminalId})
+          .eq('driver_id', user.id);
       return;
     } catch (_) {}
 
     try {
-      await _client.from('drivers').update({
-        'current_terminal_id': terminalId,
-      }).eq('id', user.id);
+      await _client
+          .from('drivers')
+          .update({'current_terminal_id': terminalId})
+          .eq('id', user.id);
     } catch (_) {}
   }
 

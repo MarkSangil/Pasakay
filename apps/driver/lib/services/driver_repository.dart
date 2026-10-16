@@ -9,7 +9,7 @@ import 'supabase_config.dart';
 
 class DriverRepository {
   DriverRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseConfig.client;
+    : _client = client ?? SupabaseConfig.client;
 
   final SupabaseClient _client;
 
@@ -23,16 +23,20 @@ class DriverRepository {
       'review_id, driver_id, booking_id, rating, content, date_created, is_hidden';
 
   Future<List<Terminal>> fetchTerminals() async {
-    final rows =
-        await _client.from('terminals').select().order('terminal_name');
+    final rows = await _client
+        .from('terminals')
+        .select()
+        .order('terminal_name');
     return (rows as List)
         .map((e) => Terminal.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
   Future<List<Shift>> fetchShifts() async {
-    final rows =
-        await _client.from('shifts').select().order('shift_start_time');
+    final rows = await _client
+        .from('shifts')
+        .select()
+        .order('shift_start_time');
     return (rows as List)
         .map((e) => Shift.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
@@ -78,8 +82,10 @@ class DriverRepository {
     required String driverId,
     RideRequestStatus? status,
   }) async {
-    var query =
-        _client.from('ride_requests').select(_requestSelect).eq('driver_id', driverId);
+    var query = _client
+        .from('ride_requests')
+        .select(_requestSelect)
+        .eq('driver_id', driverId);
 
     if (status != null) {
       query = query.eq('status', status.dbValue);
@@ -97,8 +103,10 @@ class DriverRepository {
     DateTime? from,
     DateTime? to,
   }) async {
-    var query =
-        _client.from('bookings').select(_bookingSelect).eq('driver_id', driverId);
+    var query = _client
+        .from('bookings')
+        .select(_bookingSelect)
+        .eq('driver_id', driverId);
 
     if (status != null) {
       query = query.eq('status', status.dbValue);
@@ -164,6 +172,37 @@ class DriverRepository {
       params: {'p_booking_id': bookingId},
     );
     return Booking.fromJson(Map<String, dynamic>.from(row as Map));
+  }
+
+  /// Foreground-usage tracking config (heartbeat/timeout seconds).
+  /// Falls back to client defaults when offline.
+  Future<Map<String, int>> fetchActivityConfig() async {
+    final raw = await _client.rpc('get_driver_activity_config');
+    final map = Map<String, dynamic>.from(raw as Map);
+    return {
+      'heartbeat_seconds': (map['heartbeat_seconds'] as num?)?.toInt() ?? 30,
+      'timeout_seconds': (map['timeout_seconds'] as num?)?.toInt() ?? 120,
+    };
+  }
+
+  /// Reports one activity event. Identity comes from the authenticated
+  /// session server-side; heartbeats are idempotent via [heartbeatId].
+  Future<Map<String, dynamic>> reportActivity({
+    required String sessionId,
+    required String event,
+    String? heartbeatId,
+    String? endReason,
+  }) async {
+    final raw = await _client.rpc(
+      'report_driver_activity',
+      params: {
+        'p_session_id': sessionId,
+        'p_event': event,
+        'p_heartbeat_id': heartbeatId,
+        'p_end_reason': endReason,
+      },
+    );
+    return Map<String, dynamic>.from(raw as Map);
   }
 
   Future<Map<String, int>> fetchBookingSettings() async {
@@ -238,7 +277,9 @@ class DriverRepository {
         .order('date_sent', ascending: false)
         .limit(50);
     return (rows as List)
-        .map((e) => AppNotification.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) => AppNotification.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
         .toList();
   }
 
@@ -277,10 +318,10 @@ class DriverRepository {
     required String token,
     required String platform,
   }) async {
-    await _client.rpc('register_driver_device_token', params: {
-      'p_token': token,
-      'p_platform': platform,
-    });
+    await _client.rpc(
+      'register_driver_device_token',
+      params: {'p_token': token, 'p_platform': platform},
+    );
   }
 
   Future<void> deleteDeviceToken({
@@ -294,7 +335,9 @@ class DriverRepository {
         .eq('token', token);
   }
 
-  Future<Map<String, bool>> fetchNotificationPreferences(String driverId) async {
+  Future<Map<String, bool>> fetchNotificationPreferences(
+    String driverId,
+  ) async {
     final row = await _client
         .from('driver_notification_preferences')
         .select()

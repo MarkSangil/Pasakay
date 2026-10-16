@@ -70,10 +70,9 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
       _loading = true;
     });
     try {
-      final drivers = await ref.read(customerRepositoryProvider).fetchDrivers(
-            terminalId: widget.terminalId,
-            shiftId: shiftId,
-          );
+      final drivers = await ref
+          .read(customerRepositoryProvider)
+          .fetchDrivers(terminalId: widget.terminalId, shiftId: shiftId);
       if (!mounted) return;
       setState(() {
         _drivers = drivers;
@@ -196,9 +195,10 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
                                     ),
                                   ),
                                   Text(
-                                    d.todaNumber == null || d.todaNumber!.isEmpty
-                                        ? 'SSLTODA No. —'
-                                        : 'SSLTODA No. ${d.todaNumber}',
+                                    d.todaNumber == null ||
+                                            d.todaNumber!.isEmpty
+                                        ? 'TODA Plate No. —'
+                                        : 'TODA Plate No. ${d.todaNumber}',
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -228,8 +228,10 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
                                 ],
                               ),
                             ),
-                            const Icon(Icons.chevron_right_rounded,
-                                color: AppColors.primary),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.primary,
+                            ),
                           ],
                         ),
                       ),

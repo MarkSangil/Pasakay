@@ -33,11 +33,17 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
       repo.fetchDrivers(),
       repo.fetchTerminals(),
       repo.fetchShifts(),
+      // Best effort: activity states must never block the driver list.
+      repo.fetchDriverActivityStates().catchError(
+        (_) => <DriverActivityState>[],
+      ),
     ]);
+    final states = results[3] as List<DriverActivityState>;
     return _DriverPage(
       drivers: results[0] as List<DriverRecord>,
       terminals: results[1] as List<TerminalRecord>,
       shifts: results[2] as List<ShiftRecord>,
+      activityByDriver: {for (final s in states) s.driverId: s},
     );
   }
 
@@ -66,7 +72,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
         final drivers = page.drivers.where((d) {
           final matchesStatus = _status == 'all' || d.status == _status;
           final haystack =
-              '${d.fullName} ${d.username} ${d.contactNumber} ${d.licenseNumber} ${d.plateNumber}'
+              '${d.fullName} ${d.username} ${d.contactNumber} ${d.todaNumber ?? ''} ${d.plateNumber}'
                   .toLowerCase();
           return matchesStatus && (query.isEmpty || haystack.contains(query));
         }).toList();
@@ -89,7 +95,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
             Row(
               children: [
                 SearchField(
-                  hint: 'Search name, plate, license',
+                  hint: 'Search name, plate, TODA',
                   onChanged: (value) => setState(() => _query = value),
                 ),
                 const SizedBox(width: 12),
@@ -97,11 +103,18 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
                   value: _status,
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                    DropdownMenuItem(value: 'pending_verification', child: Text('Pending')),
+                    DropdownMenuItem(
+                      value: 'pending_verification',
+                      child: Text('Pending'),
+                    ),
                     DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(value: 'deactivated', child: Text('Deactivated')),
+                    DropdownMenuItem(
+                      value: 'deactivated',
+                      child: Text('Deactivated'),
+                    ),
                   ],
-                  onChanged: (value) => setState(() => _status = value ?? 'all'),
+                  onChanged: (value) =>
+                      setState(() => _status = value ?? 'all'),
                 ),
               ],
             ),
@@ -112,11 +125,19 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
                   : Column(
                       children: [
                         const TableHeader(
-                          cells: ['Driver', 'Assignment', 'License', 'Status', ''],
+                          cells: [
+                            'Driver',
+                            'Assignment',
+                            'TODA Plate',
+                            'App activity',
+                            'Status',
+                            '',
+                          ],
                         ),
                         for (final driver in drivers)
                           _DriverRow(
                             driver: driver,
+                            activity: page.activityByDriver[driver.id],
                             onOpen: () => context.go('/drivers/${driver.id}'),
                             onVerify: () => _verify(driver),
                             onStatus: () => _setStatus(driver),
@@ -149,7 +170,9 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
     );
     if (result == null) return;
     try {
-      await ref.read(adminRepositoryProvider).verifyLicense(
+      await ref
+          .read(adminRepositoryProvider)
+          .verifyTodaPlate(
             driver.id,
             verified: result.verified,
             todaNumber: result.todaNumber,
@@ -167,11 +190,9 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
     );
     if (result == null) return;
     try {
-      await ref.read(adminRepositoryProvider).setDriverStatus(
-            driver.id,
-            result.status,
-            result.reason,
-          );
+      await ref
+          .read(adminRepositoryProvider)
+          .setDriverStatus(driver.id, result.status, result.reason);
       _reload();
     } catch (error) {
       if (mounted) showError(context, error);
@@ -188,9 +209,14 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
     );
     if (password == null || !mounted) return;
     try {
-      await ref.read(adminRepositoryProvider).resetDriverPassword(driver.id, password);
+      await ref
+          .read(adminRepositoryProvider)
+          .resetDriverPassword(driver.id, password);
       if (mounted) {
-        showInfo(context, 'Password reset. Give it to the driver outside the app.');
+        showInfo(
+          context,
+          'Password reset. Give it to the driver outside the app.',
+        );
       }
     } catch (error) {
       if (mounted) showError(context, error);
@@ -221,11 +247,13 @@ class _DriverPage {
     required this.drivers,
     required this.terminals,
     required this.shifts,
+    this.activityByDriver = const {},
   });
 
   final List<DriverRecord> drivers;
   final List<TerminalRecord> terminals;
   final List<ShiftRecord> shifts;
+  final Map<String, DriverActivityState> activityByDriver;
 }
 
 class _DriverRow extends StatelessWidget {
@@ -236,6 +264,7 @@ class _DriverRow extends StatelessWidget {
     required this.onStatus,
     required this.onReset,
     required this.onDelete,
+    this.activity,
   });
 
   final DriverRecord driver;
@@ -244,6 +273,7 @@ class _DriverRow extends StatelessWidget {
   final VoidCallback onStatus;
   final VoidCallback onReset;
   final VoidCallback onDelete;
+  final DriverActivityState? activity;
 
   @override
   Widget build(BuildContext context) {
@@ -280,19 +310,24 @@ class _DriverRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text('${driver.terminalName ?? '—'} · ${driver.shiftLabel ?? '—'}'),
+            child: Text(
+              '${driver.terminalName ?? '—'} · ${driver.shiftLabel ?? '—'}',
+            ),
           ),
           Expanded(
             child: Text(
-              driver.licenseVerified
-                  ? '${driver.licenseNumber} · visually checked'
-                  : '${driver.licenseNumber} · not checked',
+              driver.todaVerified
+                  ? '${driver.todaNumber ?? '—'} · verified'
+                  : '${driver.todaNumber ?? '—'} · not verified',
               style: TextStyle(
-                color: driver.licenseVerified ? AppColors.success : AppColors.warning,
+                color: driver.todaVerified
+                    ? AppColors.success
+                    : AppColors.warning,
                 fontSize: 13,
               ),
             ),
           ),
+          Expanded(child: _ActivityCell(activity: activity)),
           Expanded(child: StatusChip(status: driver.status)),
           Expanded(
             child: Wrap(
@@ -307,7 +342,10 @@ class _DriverRow extends StatelessWidget {
                     if (value == 'delete') onDelete();
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'reset', child: Text('Reset password')),
+                    PopupMenuItem(
+                      value: 'reset',
+                      child: Text('Reset password'),
+                    ),
                     PopupMenuItem(value: 'delete', child: Text('Remove')),
                   ],
                 ),
@@ -318,6 +356,71 @@ class _DriverRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Recorded foreground-app activity (not account status, shift, or login).
+/// Missing data renders as Unknown, never as active.
+class _ActivityCell extends StatelessWidget {
+  const _ActivityCell({required this.activity});
+
+  final DriverActivityState? activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = activity;
+    if (a == null) {
+      return const Text('—', style: TextStyle(fontSize: 13));
+    }
+    final color = switch (a.state) {
+      'active_now' => AppColors.success,
+      'inactive' => AppColors.warning,
+      'offline' => AppColors.textMuted,
+      _ => AppColors.textSecondary,
+    };
+    final detail = a.state == 'active_now' && a.currentActiveSeconds != null
+        ? 'active ${_formatDuration(a.currentActiveSeconds!)}'
+        : (a.lastSeen == null ? 'never seen' : formatWhen(a.lastSeen));
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                a.label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                detail,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatDuration(int totalSeconds) {
+  final h = totalSeconds ~/ 3600;
+  final m = (totalSeconds % 3600) ~/ 60;
+  if (h > 0) return '${h}h ${m}m';
+  if (m > 0) return '${m}m';
+  return '${totalSeconds}s';
 }
 
 class _DriverFormDialog extends ConsumerStatefulWidget {
@@ -333,7 +436,6 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _contact = TextEditingController();
-  final _license = TextEditingController();
   final _plate = TextEditingController();
   final _toda = TextEditingController();
   final _username = TextEditingController();
@@ -346,7 +448,6 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
   void dispose() {
     _name.dispose();
     _contact.dispose();
-    _license.dispose();
     _plate.dispose();
     _toda.dispose();
     _username.dispose();
@@ -358,10 +459,11 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await ref.read(adminRepositoryProvider).createDriver(
+      await ref
+          .read(adminRepositoryProvider)
+          .createDriver(
             fullName: _name.text.trim(),
             contactNumber: _contact.text.trim(),
-            licenseNumber: _license.text.trim(),
             plateNumber: _plate.text.trim(),
             username: _username.text.trim(),
             password: _password.text,
@@ -397,7 +499,9 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _contact,
-                  decoration: const InputDecoration(labelText: 'Contact number'),
+                  decoration: const InputDecoration(
+                    labelText: 'Contact number',
+                  ),
                   validator: DriverFormValidators.contactNumber,
                 ),
                 const SizedBox(height: 10),
@@ -412,19 +516,11 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
                 TextFormField(
                   controller: _password,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Temporary password'),
+                  decoration: const InputDecoration(
+                    labelText: 'Temporary password',
+                  ),
                   validator: (v) =>
                       DriverFormValidators.password(v, required: true),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _license,
-                  decoration: const InputDecoration(
-                    labelText: "Driver's License (D00-00-000000)",
-                    helperText: 'Format: D00-00-000000',
-                  ),
-                  inputFormatters: [DriverLicenseFormatter()],
-                  validator: DriverFormValidators.licenseNumberFormat,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -439,8 +535,10 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _toda,
-                  decoration: const InputDecoration(labelText: 'SSLTODA No. (optional)'),
-                  validator: (v) => DriverFormValidators.ssltodaNumber(v),
+                  decoration: const InputDecoration(
+                    labelText: 'TODA Plate Number (e.g. SSLTODA No. 00876)',
+                  ),
+                  validator: DriverFormValidators.todaPlateNumber,
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
@@ -448,7 +546,10 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
                   decoration: const InputDecoration(labelText: 'Terminal'),
                   items: [
                     for (final terminal in widget.page.terminals)
-                      DropdownMenuItem(value: terminal.id, child: Text(terminal.name)),
+                      DropdownMenuItem(
+                        value: terminal.id,
+                        child: Text(terminal.name),
+                      ),
                   ],
                   onChanged: (value) => setState(() => _terminalId = value),
                   validator: (v) =>
@@ -475,7 +576,10 @@ class _DriverFormDialogState extends ConsumerState<_DriverFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _saving ? null : _save,
           child: Text(_saving ? 'Saving...' : 'Create pending account'),
@@ -503,7 +607,9 @@ class _VerifyDialog extends StatefulWidget {
 
 class _VerifyDialogState extends State<_VerifyDialog> {
   bool _checked = false;
-  late final _toda = TextEditingController(text: widget.driver.todaNumber ?? '');
+  late final _toda = TextEditingController(
+    text: widget.driver.todaNumber ?? '',
+  );
   String? _todaError;
 
   @override
@@ -513,7 +619,7 @@ class _VerifyDialogState extends State<_VerifyDialog> {
   }
 
   void _markVerified() {
-    final error = DriverFormValidators.ssltodaNumber(_toda.text, required: true);
+    final error = DriverFormValidators.todaPlateNumber(_toda.text);
     setState(() => _todaError = error);
     if (!_checked || error != null) return;
     Navigator.pop(
@@ -525,7 +631,7 @@ class _VerifyDialogState extends State<_VerifyDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Visual license check'),
+      title: const Text('Verify TODA plate'),
       content: SizedBox(
         width: 460,
         child: Column(
@@ -538,7 +644,7 @@ class _VerifyDialogState extends State<_VerifyDialog> {
             ),
             const SizedBox(height: 12),
             SelectableText(
-              widget.driver.licenseNumber,
+              'Plate ${widget.driver.plateNumber}',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 16),
@@ -546,7 +652,7 @@ class _VerifyDialogState extends State<_VerifyDialog> {
               controller: _toda,
               textCapitalization: TextCapitalization.characters,
               decoration: InputDecoration(
-                labelText: 'SSLTODA No.',
+                labelText: 'TODA Plate Number',
                 helperText: 'Required when marking this driver as verified.',
                 errorText: _todaError,
               ),
@@ -559,17 +665,15 @@ class _VerifyDialogState extends State<_VerifyDialog> {
               contentPadding: EdgeInsets.zero,
               value: _checked,
               onChanged: (value) => setState(() => _checked = value ?? false),
-              title: const Text('I have visually checked this license number'),
+              title: const Text('I have verified this TODA plate number'),
             ),
           ],
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(
-            context,
-            const _VerifyResult(verified: false),
-          ),
+          onPressed: () =>
+              Navigator.pop(context, const _VerifyResult(verified: false)),
           child: const Text('Clear verification'),
         ),
         FilledButton(
@@ -618,7 +722,7 @@ class _StatusDialogState extends State<_StatusDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final canActivate = widget.driver.licenseVerified;
+    final canActivate = widget.driver.todaVerified;
     return AlertDialog(
       title: const Text('Account status'),
       content: SizedBox(
@@ -632,13 +736,18 @@ class _StatusDialogState extends State<_StatusDialog> {
                 DropdownMenuItem(
                   value: 'active',
                   enabled: canActivate,
-                  child: Text(canActivate ? 'Active' : 'Active (license not verified)'),
+                  child: Text(
+                    canActivate ? 'Active' : 'Active (TODA plate not verified)',
+                  ),
                 ),
                 const DropdownMenuItem(
                   value: 'pending_verification',
                   child: Text('Pending verification'),
                 ),
-                const DropdownMenuItem(value: 'deactivated', child: Text('Deactivated')),
+                const DropdownMenuItem(
+                  value: 'deactivated',
+                  child: Text('Deactivated'),
+                ),
               ],
               onChanged: (value) => setState(() => _status = value ?? _status),
             ),
@@ -655,7 +764,10 @@ class _StatusDialogState extends State<_StatusDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(
             context,

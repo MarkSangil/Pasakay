@@ -33,7 +33,7 @@ flutter run -d chrome
 
 ## What this console does — and does not
 
-1. **Drivers** — list, open a detail page to view/edit profile and shift availability, verify license, activate/suspend/deactivate. Activation is blocked until that manual check. No LTFRB lookup, no bulk import/export, no change log.
+1. **Drivers** — list, open a detail page to view/edit profile and shift availability, verify TODA plate, activate/suspend/deactivate. Activation is blocked until that manual check. No LTFRB lookup, no bulk import/export, no change log.
 2. **Terminals** — plain-text list. No map. Delete is blocked while drivers are still assigned; reassign them first.
 3. **Shifts** — edit the 3 existing blocks and reassign drivers. Cannot add or delete a shift. This is assignment, not clock-in. Overlapping windows warn but a driver can only sit on one shift.
 4. **Commuters** — view, suspend, or deactivate. No abuse-report queue, no blacklist, and no call/SMS content.

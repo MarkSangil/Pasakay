@@ -159,6 +159,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   Future<void> _sendRequest() async {
     final driver = _driver;
     if (driver == null || _requestBusy) return;
+    // Captured before the dialog await: after it, the page may be covered
+    // or mid-navigation, and a fresh lookup can hit a stale context.
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -178,23 +181,18 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     );
     if (confirmed != true) return;
 
+    if (!mounted) return;
     setState(() => _requestBusy = true);
     try {
       await ref.read(customerRepositoryProvider).createRideRequest(driver.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request sent')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('Request sent')));
       await _load();
       _syncPolling();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AuthValidators.friendlyError(e),
-          ),
-        ),
+      messenger.showSnackBar(
+        SnackBar(content: Text(AuthValidators.friendlyError(e))),
       );
     } finally {
       if (mounted) setState(() => _requestBusy = false);
@@ -216,7 +214,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       );
       return;
     }
-    await ref.read(customerRepositoryProvider).addRecent(
+    await ref
+        .read(customerRepositoryProvider)
+        .addRecent(
           RecentContact(
             driverId: driver.id,
             driverName: driver.fullName,
@@ -245,20 +245,24 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   Future<void> _reportRider() async {
     final bookingId = _ctx?.reportableBookingId ?? _ctx?.booking?.id;
     if (bookingId == null || _requestBusy) return;
+    final messenger = ScaffoldMessenger.of(context);
     final result = await showDialog<_ReportResult>(
       context: context,
       builder: (context) => const _ReportRiderDialog(),
     );
     if (result == null) return;
+    if (!mounted) return;
     setState(() => _requestBusy = true);
     try {
-      await ref.read(customerRepositoryProvider).reportDriverBooking(
+      await ref
+          .read(customerRepositoryProvider)
+          .reportDriverBooking(
             bookingId: bookingId,
             reason: result.reason,
             details: result.details,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Rider reported. Review is no longer available.'),
         ),
@@ -266,7 +270,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text(AuthValidators.friendlyError(e))),
       );
     } finally {
@@ -278,7 +282,8 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   Widget build(BuildContext context) {
     final driver = _driver;
     final ctx = _ctx;
-    final canRequest = ctx?.canRequest == true &&
+    final canRequest =
+        ctx?.canRequest == true &&
         ctx?.request?.status != 'PENDING' &&
         !_hasActiveBooking &&
         !_isSuspended &&
@@ -290,16 +295,16 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     final showPhone = callSms && peerPhone.isNotEmpty;
     final canReport = ctx?.canReport == true && !_requestBusy;
     final canReview = ctx?.canReview == true && !_requestBusy;
-    final showReviewAction = canReview ||
+    final showReviewAction =
+        canReview ||
         (ctx?.alreadyReviewed == true) ||
-        (ctx?.alreadyReported == true &&
-            ctx?.booking?.status == 'COMPLETED');
+        (ctx?.alreadyReported == true && ctx?.booking?.status == 'COMPLETED');
     final reviewEnabled = canReview;
     final reviewLabel = ctx?.alreadyReviewed == true
         ? 'Reviewed'
         : ctx?.alreadyReported == true
-            ? 'Review unavailable'
-            : 'Leave a review';
+        ? 'Review unavailable'
+        : 'Leave a review';
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -307,220 +312,215 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-                        children: [
-                          const Center(child: AvatarCircle(size: 96)),
-                          const SizedBox(height: 14),
-                          Text(
-                            driver!.fullName,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
+          ? Center(child: Text(_error!))
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+                    children: [
+                      const Center(child: AvatarCircle(size: 96)),
+                      const SizedBox(height: 14),
+                      Text(
+                        driver!.fullName,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        driver.todaNumber == null || driver.todaNumber!.isEmpty
+                            ? 'TODA Plate No. —'
+                            : 'TODA Plate No. ${driver.todaNumber}',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (ctx != null && !ctx.onShift) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Outside scheduled operating period',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.danger,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                      if (suspendedBanner) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Your account is suspended. You can browse but cannot send booking requests.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.danger,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+                      _InfoRow(
+                        icon: Icons.directions_car_outlined,
+                        label: 'Plate Number',
+                        value: driver.plateNumber,
+                      ),
+                      _InfoRow(
+                        icon: Icons.phone_outlined,
+                        label: 'Mobile Number',
+                        value: showPhone
+                            ? PhoneUtils.display(peerPhone)
+                            : 'Visible during accepted booking only',
+                      ),
+                      _InfoRow(
+                        icon: Icons.location_on_outlined,
+                        label: 'Assigned Terminal',
+                        value: driver.terminalName ?? '—',
+                      ),
+                      _InfoRow(
+                        icon: Icons.schedule_outlined,
+                        label: 'Current Schedule',
+                        value: driver.shiftLabel ?? '—',
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _followBusy ? null : _toggleFollow,
+                          icon: Icon(
+                            _following ? Icons.favorite : Icons.favorite_border,
+                            color: AppColors.primary,
+                          ),
+                          label: Text(
+                            _following
+                                ? 'Following — tap to unfollow'
+                                : 'Follow / Favorite',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: canRequest ? _sendRequest : null,
+                            child: _requestBusy
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    showPending
+                                        ? 'Request Pending'
+                                        : _requestLabel,
+                                  ),
+                          ),
+                        ),
+                        if (ctx?.reason != null &&
+                            !canRequest &&
+                            !showPending &&
+                            !_hasActiveBooking)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              ctx!.reason!,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            driver.todaNumber == null ||
-                                    driver.todaNumber!.isEmpty
-                                ? 'SSLTODA No. —'
-                                : 'SSLTODA No. ${driver.todaNumber}',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
+                        if (callSms) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _contact('call'),
+                                  icon: const Icon(Icons.phone_rounded),
+                                  label: const Text('Call'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _contact('sms'),
+                                  icon: const Icon(Icons.sms_outlined),
+                                  label: const Text('Message'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (showReviewAction) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: reviewEnabled
+                                  ? () {
+                                      final bookingId =
+                                          ctx?.reviewableBookingId ??
+                                          ctx?.booking?.id;
+                                      if (bookingId == null) return;
+                                      context.go(
+                                        '/review?bookingId=$bookingId',
+                                      );
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.star_outline_rounded),
+                              label: Text(reviewLabel),
                             ),
                           ),
-                          if (ctx != null && !ctx.onShift) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              'Outside scheduled operating period',
+                        ],
+                        if (canReport) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.danger,
+                                side: const BorderSide(color: AppColors.danger),
+                              ),
+                              onPressed: _reportRider,
+                              icon: const Icon(Icons.flag_outlined),
+                              label: const Text('Report rider'),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Available after the booking finishes. Reporting disables review.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.plusJakartaSans(
-                                color: AppColors.danger,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                          if (suspendedBanner) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              'Your account is suspended. You can browse but cannot send booking requests.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
-                                color: AppColors.danger,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 28),
-                          _InfoRow(
-                            icon: Icons.directions_car_outlined,
-                            label: 'Plate Number',
-                            value: driver.plateNumber,
-                          ),
-                          _InfoRow(
-                            icon: Icons.phone_outlined,
-                            label: 'Mobile Number',
-                            value: showPhone
-                                ? PhoneUtils.display(peerPhone)
-                                : 'Visible during accepted booking only',
-                          ),
-                          _InfoRow(
-                            icon: Icons.location_on_outlined,
-                            label: 'Assigned Terminal',
-                            value: driver.terminalName ?? '—',
-                          ),
-                          _InfoRow(
-                            icon: Icons.schedule_outlined,
-                            label: 'Current Schedule',
-                            value: driver.shiftLabel ?? '—',
-                          ),
-                          const SizedBox(height: 8),
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: _followBusy ? null : _toggleFollow,
-                              icon: Icon(
-                                _following
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: AppColors.primary,
-                              ),
-                              label: Text(
-                                _following
-                                    ? 'Following — tap to unfollow'
-                                    : 'Follow / Favorite',
+                                fontSize: 12,
+                                color: AppColors.textMuted,
                               ),
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: canRequest ? _sendRequest : null,
-                                child: _requestBusy
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Text(
-                                        showPending
-                                            ? 'Request Pending'
-                                            : _requestLabel,
-                                      ),
-                              ),
-                            ),
-                            if (ctx?.reason != null &&
-                                !canRequest &&
-                                !showPending &&
-                                !_hasActiveBooking)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  ctx!.reason!,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              ),
-                            if (callSms) ...[
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () => _contact('call'),
-                                      icon: const Icon(Icons.phone_rounded),
-                                      label: const Text('Call'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => _contact('sms'),
-                                      icon: const Icon(Icons.sms_outlined),
-                                      label: const Text('Message'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            if (showReviewAction) ...[
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: reviewEnabled
-                                      ? () {
-                                          final bookingId =
-                                              ctx?.reviewableBookingId ??
-                                                  ctx?.booking?.id;
-                                          if (bookingId == null) return;
-                                          context.go(
-                                            '/review?bookingId=$bookingId',
-                                          );
-                                        }
-                                      : null,
-                                  icon: const Icon(Icons.star_outline_rounded),
-                                  label: Text(reviewLabel),
-                                ),
-                              ),
-                            ],
-                            if (canReport) ...[
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppColors.danger,
-                                    side: const BorderSide(
-                                      color: AppColors.danger,
-                                    ),
-                                  ),
-                                  onPressed: _reportRider,
-                                  icon: const Icon(Icons.flag_outlined),
-                                  label: const Text('Report rider'),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  'Available after the booking finishes. Reporting disables review.',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
     );
   }
 }

@@ -4,15 +4,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../models/driver.dart';
 import '../../services/auth_service.dart';
+import '../../services/driver_activity_tracker.dart';
 import '../../services/driver_repository.dart';
 import '../../services/push_notification_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
-final driverRepositoryProvider =
-    Provider<DriverRepository>((ref) => DriverRepository());
+final driverRepositoryProvider = Provider<DriverRepository>(
+  (ref) => DriverRepository(),
+);
 
-final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
+final pushNotificationServiceProvider = Provider<PushNotificationService>((
+  ref,
+) {
   return PushNotificationService(ref.watch(driverRepositoryProvider));
 });
 
@@ -62,10 +66,9 @@ class SessionController extends AsyncNotifier<Driver?> {
 
   Future<void> login(String mobile, String password) async {
     try {
-      await ref.read(authServiceProvider).login(
-            mobile: mobile,
-            password: password,
-          );
+      await ref
+          .read(authServiceProvider)
+          .login(mobile: mobile, password: password);
       final driver = await ref.read(authServiceProvider).fetchCurrentDriver();
       if (driver == null) {
         await ref.read(authServiceProvider).logout();
@@ -88,17 +91,19 @@ class SessionController extends AsyncNotifier<Driver?> {
     required String mobile,
     required String email,
     required String password,
-    required String licenseNumber,
+    required String todaNumber,
     required String plateNumber,
     required String assignedTerminalId,
   }) async {
     try {
-      await ref.read(authServiceProvider).signUp(
+      await ref
+          .read(authServiceProvider)
+          .signUp(
             fullName: fullName,
             mobile: mobile,
             email: email,
             password: password,
-            licenseNumber: licenseNumber,
+            todaNumber: todaNumber,
             plateNumber: plateNumber,
             assignedTerminalId: assignedTerminalId,
           );
@@ -132,15 +137,18 @@ class SessionController extends AsyncNotifier<Driver?> {
       return driver;
     }
     await ref.read(authServiceProvider).logout();
-    throw AuthFlowException(_blockedMessage(driver.status, driver.statusReason));
+    throw AuthFlowException(
+      _blockedMessage(driver.status, driver.statusReason),
+    );
   }
 
   String _blockedMessage(String status, String? reason) {
     final detail = (reason == null || reason.isEmpty) ? '' : ' $reason';
     return switch (status) {
       'pending_verification' =>
-        'Your account is waiting for an administrator to visually verify your license.$detail',
-      'deactivated' || 'suspended' => 'Your account has been deactivated.$detail',
+        'Your account is waiting for an administrator to verify your TODA plate.$detail',
+      'deactivated' ||
+      'suspended' => 'Your account has been deactivated.$detail',
       _ => 'This account cannot sign in.$detail',
     };
   }
@@ -154,13 +162,19 @@ class SessionController extends AsyncNotifier<Driver?> {
     required String currentPassword,
     required String newPassword,
   }) {
-    return ref.read(authServiceProvider).changePassword(
+    return ref
+        .read(authServiceProvider)
+        .changePassword(
           currentPassword: currentPassword,
           newPassword: newPassword,
         );
   }
 
   Future<void> logout() async {
+    try {
+      // End the activity session while still authenticated (reason: logout).
+      await ref.read(driverActivityTrackerProvider).endForLogout();
+    } catch (_) {}
     try {
       await ref.read(pushNotificationServiceProvider).stop();
     } catch (_) {}
@@ -169,8 +183,9 @@ class SessionController extends AsyncNotifier<Driver?> {
   }
 }
 
-final sessionProvider =
-    AsyncNotifierProvider<SessionController, Driver?>(SessionController.new);
+final sessionProvider = AsyncNotifierProvider<SessionController, Driver?>(
+  SessionController.new,
+);
 
 class BookingsRefresh extends Notifier<int> {
   @override
@@ -179,29 +194,26 @@ class BookingsRefresh extends Notifier<int> {
   void bump() => state++;
 }
 
-final bookingsRefreshProvider =
-    NotifierProvider<BookingsRefresh, int>(BookingsRefresh.new);
+final bookingsRefreshProvider = NotifierProvider<BookingsRefresh, int>(
+  BookingsRefresh.new,
+);
 
 /// Registers FCM + realtime heads-up when a usable driver session is present.
 final pushRegistrationProvider = Provider<void>((ref) {
-  ref.listen<AsyncValue<Driver?>>(
-    sessionProvider,
-    (previous, next) {
-      // Ignore loading/error transitions so we don't delete tokens mid-refresh.
-      if (next.isLoading || next.hasError) return;
-      next.whenData((driver) async {
-        final push = ref.read(pushNotificationServiceProvider);
-        push.onInboxChanged = () {
-          ref.read(bookingsRefreshProvider.notifier).bump();
-        };
-        if (driver != null && driver.status == 'active') {
-          await Future<void>.delayed(const Duration(milliseconds: 400));
-          await push.startForDriver(driver.id);
-        } else if (previous?.value != null && driver == null) {
-          await push.stop();
-        }
-      });
-    },
-    fireImmediately: true,
-  );
+  ref.listen<AsyncValue<Driver?>>(sessionProvider, (previous, next) {
+    // Ignore loading/error transitions so we don't delete tokens mid-refresh.
+    if (next.isLoading || next.hasError) return;
+    next.whenData((driver) async {
+      final push = ref.read(pushNotificationServiceProvider);
+      push.onInboxChanged = () {
+        ref.read(bookingsRefreshProvider.notifier).bump();
+      };
+      if (driver != null && driver.status == 'active') {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await push.startForDriver(driver.id);
+      } else if (previous?.value != null && driver == null) {
+        await push.stop();
+      }
+    });
+  }, fireImmediately: true);
 });

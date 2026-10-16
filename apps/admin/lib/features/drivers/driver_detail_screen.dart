@@ -102,19 +102,16 @@ class _DriverDetailScreenState extends ConsumerState<DriverDetailScreen> {
             const SizedBox(height: 12),
             PageHeader(
               title: page.driver!.fullName,
-              subtitle: 'View and update profile details and shift availability.',
+              subtitle:
+                  'View and update profile details and shift availability.',
               action: StatusChip(status: page.driver!.status),
             ),
             const SizedBox(height: 20),
-            _DetailsCard(
-              page: page,
-              onSaved: _reload,
-            ),
+            _DetailsCard(page: page, onSaved: _reload),
             const SizedBox(height: 16),
-            _AvailabilityCard(
-              page: page,
-              onSaved: _reload,
-            ),
+            _AvailabilityCard(page: page, onSaved: _reload),
+            const SizedBox(height: 16),
+            _ActivityCard(driverId: page.driver!.id),
           ],
         );
       },
@@ -151,16 +148,18 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
   bool _saving = false;
   final _formKey = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.page.driver!.fullName);
-  late final _contact =
-      TextEditingController(text: widget.page.driver!.contactNumber);
-  late final _username =
-      TextEditingController(text: widget.page.driver!.username);
-  late final _license =
-      TextEditingController(text: widget.page.driver!.licenseNumber);
-  late final _plate =
-      TextEditingController(text: widget.page.driver!.plateNumber);
-  late final _toda =
-      TextEditingController(text: widget.page.driver!.todaNumber ?? '');
+  late final _contact = TextEditingController(
+    text: widget.page.driver!.contactNumber,
+  );
+  late final _username = TextEditingController(
+    text: widget.page.driver!.username,
+  );
+  late final _plate = TextEditingController(
+    text: widget.page.driver!.plateNumber,
+  );
+  late final _toda = TextEditingController(
+    text: widget.page.driver!.todaNumber ?? '',
+  );
   late String? _terminalId = widget.page.driver!.terminalId;
 
   @override
@@ -171,7 +170,6 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
       _name.text = d.fullName;
       _contact.text = d.contactNumber;
       _username.text = d.username;
-      _license.text = d.licenseNumber;
       _plate.text = d.plateNumber;
       _toda.text = d.todaNumber ?? '';
       _terminalId = d.terminalId;
@@ -183,7 +181,6 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
     _name.dispose();
     _contact.dispose();
     _username.dispose();
-    _license.dispose();
     _plate.dispose();
     _toda.dispose();
     super.dispose();
@@ -196,7 +193,6 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
       _name.text = d.fullName;
       _contact.text = d.contactNumber;
       _username.text = d.username;
-      _license.text = d.licenseNumber;
       _plate.text = d.plateNumber;
       _toda.text = d.todaNumber ?? '';
       _terminalId = d.terminalId;
@@ -208,11 +204,12 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
     setState(() => _saving = true);
     try {
       final driver = widget.page.driver!;
-      await ref.read(adminRepositoryProvider).updateDriver(
+      await ref
+          .read(adminRepositoryProvider)
+          .updateDriver(
             driverId: driver.id,
             fullName: _name.text.trim(),
             contactNumber: _contact.text.trim(),
-            licenseNumber: _license.text.trim(),
             plateNumber: _plate.text.trim(),
             username: _username.text.trim(),
             terminalId: _terminalId!,
@@ -264,18 +261,21 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
               _DetailRow(label: 'Name', value: driver.fullName),
               _DetailRow(label: 'Phone', value: driver.contactNumber),
               _DetailRow(label: 'Username', value: driver.username),
-              _DetailRow(label: 'License No.', value: driver.licenseNumber),
               _DetailRow(
-                label: 'License check',
-                value: driver.licenseVerified
-                    ? 'Visually verified${driver.licenseVerifiedAt == null ? '' : ' · ${formatWhen(driver.licenseVerifiedAt)}'}'
+                label: 'TODA Plate No.',
+                value: driver.todaNumber ?? '—',
+              ),
+              _DetailRow(
+                label: 'Verification',
+                value: driver.todaVerified
+                    ? 'Verified${driver.todaVerifiedAt == null ? '' : ' · ${formatWhen(driver.todaVerifiedAt)}'}'
                     : 'Not verified',
               ),
               _DetailRow(label: 'Plate', value: driver.plateNumber),
-              _DetailRow(label: 'SSLTODA No.', value: driver.todaNumber ?? '—'),
               _DetailRow(label: 'Terminal', value: driver.terminalName ?? '—'),
               _DetailRow(label: 'Status', value: statusLabel(driver.status)),
-              if (driver.statusReason != null && driver.statusReason!.isNotEmpty)
+              if (driver.statusReason != null &&
+                  driver.statusReason!.isNotEmpty)
                 _DetailRow(label: 'Status reason', value: driver.statusReason!),
             ] else
               Form(
@@ -290,8 +290,9 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: _contact,
-                      decoration:
-                          const InputDecoration(labelText: 'Contact number'),
+                      decoration: const InputDecoration(
+                        labelText: 'Contact number',
+                      ),
                       validator: DriverFormValidators.contactNumber,
                     ),
                     const SizedBox(height: 10),
@@ -299,17 +300,6 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
                       controller: _username,
                       decoration: const InputDecoration(labelText: 'Username'),
                       validator: DriverFormValidators.requiredName,
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _license,
-                      inputFormatters: [DriverLicenseFormatter()],
-                      decoration: const InputDecoration(
-                        labelText: "Driver's License (D00-00-000000)",
-                        helperText:
-                            'Changing the license clears verification until checked again.',
-                      ),
-                      validator: DriverFormValidators.licenseNumber,
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -324,22 +314,20 @@ class _DetailsCardState extends ConsumerState<_DetailsCard> {
                     TextFormField(
                       controller: _toda,
                       decoration: const InputDecoration(
-                        labelText: 'SSLTODA No.',
+                        labelText: 'TODA Plate Number (e.g. SSLTODA No. 00876)',
+                        helperText: 'Changing the TODA plate clears verification until checked again.',
                       ),
-                      validator: (v) =>
-                          DriverFormValidators.ssltodaNumber(v),
+                      validator: DriverFormValidators.todaPlateNumber,
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       initialValue: _terminalId,
-                      decoration:
-                          const InputDecoration(labelText: 'Terminal'),
+                      decoration: const InputDecoration(labelText: 'Terminal'),
                       items: [
                         for (final t in widget.page.terminals)
                           DropdownMenuItem(value: t.id, child: Text(t.name)),
                       ],
-                      onChanged: (value) =>
-                          setState(() => _terminalId = value),
+                      onChanged: (value) => setState(() => _terminalId = value),
                       validator: (v) =>
                           DriverFormValidators.requiredSelection(v, 'terminal'),
                     ),
@@ -397,7 +385,9 @@ class _AvailabilityCardState extends ConsumerState<_AvailabilityCard> {
     }
     setState(() => _saving = true);
     try {
-      await ref.read(adminRepositoryProvider).updateDriverAvailability(
+      await ref
+          .read(adminRepositoryProvider)
+          .updateDriverAvailability(
             driver: widget.page.driver!,
             shiftId: _shiftId!,
           );
@@ -419,10 +409,10 @@ class _AvailabilityCardState extends ConsumerState<_AvailabilityCard> {
   @override
   Widget build(BuildContext context) {
     final driver = widget.page.driver!;
-            final current = widget.page.shifts
-                .where((s) => s.id == driver.shiftId)
-                .cast<ShiftRecord?>()
-                .firstOrNull;
+    final current = widget.page.shifts
+        .where((s) => s.id == driver.shiftId)
+        .cast<ShiftRecord?>()
+        .firstOrNull;
     final dirty = _shiftId != driver.shiftId;
 
     return DataCard(
@@ -439,9 +429,8 @@ class _AvailabilityCardState extends ConsumerState<_AvailabilityCard> {
             Text(
               'PASAKAY availability is the assigned shift block (one of 3). '
               'It is schedule assignment, not clock-in attendance.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
             _DetailRow(
@@ -462,7 +451,10 @@ class _AvailabilityCardState extends ConsumerState<_AvailabilityCard> {
                 child: Text(
                   'This driver is ${statusLabel(driver.status).toLowerCase()}, '
                   'so they will not appear as on shift until activated.',
-                  style: const TextStyle(color: AppColors.warning, fontSize: 13),
+                  style: const TextStyle(
+                    color: AppColors.warning,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             DropdownButtonFormField<String>(
@@ -531,4 +523,212 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Recorded foreground-app usage for one driver.
+///
+/// Shows the live activity state plus totals over a selectable reporting
+/// period. Totals count heartbeat-backed foreground time only — never
+/// login-to-logout spans, background time, or gaps past the timeout.
+class _ActivityCard extends ConsumerStatefulWidget {
+  const _ActivityCard({required this.driverId});
+
+  final String driverId;
+
+  @override
+  ConsumerState<_ActivityCard> createState() => _ActivityCardState();
+}
+
+class _ActivityCardState extends ConsumerState<_ActivityCard> {
+  int _rangeDays = 7;
+  late Future<_ActivityPage> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<_ActivityPage> _load() async {
+    final repo = ref.read(adminRepositoryProvider);
+    final now = DateTime.now().toUtc();
+    final from = now.subtract(Duration(days: _rangeDays));
+    final results = await Future.wait([
+      // Best effort: a state failure must not hide the usage totals.
+      repo
+          .fetchDriverActivityStates()
+          .then(
+            (list) => list
+                .where((s) => s.driverId == widget.driverId)
+                .cast<DriverActivityState?>()
+                .firstOrNull,
+          )
+          .catchError((_) => null),
+      repo.fetchDriverUsageSummary(
+        driverId: widget.driverId,
+        from: from,
+        to: now,
+      ),
+    ]);
+    return _ActivityPage(
+      state: results[0] as DriverActivityState?,
+      summary: results[1] as DriverUsageSummary,
+      days: _rangeDays,
+    );
+  }
+
+  void _setRange(int days) {
+    if (days == _rangeDays) return;
+    setState(() {
+      _rangeDays = days;
+      _future = _load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DataCard(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'App usage',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 1, label: Text('Today')),
+                    ButtonSegment(value: 7, label: Text('7 days')),
+                    ButtonSegment(value: 30, label: Text('30 days')),
+                  ],
+                  selected: {_rangeDays},
+                  onSelectionChanged: (set) => _setRange(set.first),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Recorded foreground usage — not login time, shift, or account status.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            FutureBuilder<_ActivityPage>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Text(friendlyError(snapshot.error!));
+                }
+                final page = snapshot.data!;
+                final summary = page.summary;
+                final state = page.state;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DetailRow(
+                      label: 'State',
+                      value: state == null
+                          ? 'Unknown (no data)'
+                          : _stateMeaning(state),
+                    ),
+                    _DetailRow(
+                      label: 'Last seen',
+                      value: summary.lastSeen == null
+                          ? 'Never recorded'
+                          : formatWhen(summary.lastSeen),
+                    ),
+                    _DetailRow(
+                      label: 'Foreground use',
+                      value:
+                          '${_clock(summary.totalForegroundSeconds)} over ${page.days == 1 ? 'today' : '${page.days} days'}',
+                    ),
+                    _DetailRow(label: 'Sessions', value: '${summary.sessions}'),
+                    _DetailRow(
+                      label: 'Active days',
+                      value: '${summary.activeDays}',
+                    ),
+                    if (summary.sessions == 0 &&
+                        summary.totalForegroundSeconds == 0)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4, bottom: 8),
+                        child: Text(
+                          'No qualifying foreground activity in this period. '
+                          'This driver never opened the app here, or usage predates tracking.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    if (summary.sessionsDetail.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Recent sessions (up to 50)',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 6),
+                      for (final s in summary.sessionsDetail.take(20))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            '${formatWhen(s.startedAt)} → ${s.endedAt == null ? 'open' : formatWhen(s.endedAt)}'
+                            ' · ${s.beats} beats'
+                            '${s.foregroundSeconds == null ? '' : ' · ${_clock(s.foregroundSeconds!)} foreground'}'
+                            '${s.endReason == null ? '' : ' · ended: ${s.endReason}'}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _stateMeaning(DriverActivityState state) {
+    final current = state.currentActiveSeconds == null
+        ? ''
+        : ' · active ${_clock(state.currentActiveSeconds!)}';
+    return switch (state.state) {
+      'active_now' =>
+        'Active now — foreground heartbeat within timeout$current',
+      'inactive' =>
+        'Inactive — no heartbeat within the timeout (includes stale sessions)',
+      'offline' => 'Offline — logged out, nothing since',
+      _ => 'Unknown — not enough data to judge',
+    };
+  }
+
+  String _clock(int totalSeconds) {
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$m:$ss';
+  }
+}
+
+class _ActivityPage {
+  const _ActivityPage({
+    required this.state,
+    required this.summary,
+    required this.days,
+  });
+
+  final DriverActivityState? state;
+  final DriverUsageSummary summary;
+  final int days;
 }

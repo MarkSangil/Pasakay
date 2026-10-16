@@ -31,6 +31,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   Future<void> _load() async {
+    // Guarded: _load is re-invoked after awaits (report submit, refresh),
+    // so the page may already be disposed (e.g. backgrounded mid-request).
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -70,63 +73,76 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     _autoOpenedReviewFor = target.id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Don't yank the stack while another route (e.g. the report dialog)
+      // is on top: tearing the page out from under an open dialog trips
+      // InheritedWidget deactivation asserts on resume/rebuild.
+      if (ModalRoute.of(context)?.isCurrent != true) return;
       context.go('/review?bookingId=${target.id}');
     });
   }
 
   Future<void> _reportBooking(BookingRecord booking) async {
     final reasonCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report rider'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Reporting a finished trip disables review for this booking.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Reason',
-                hintText: 'Describe the issue',
+    // Capture the messenger before any async gap: after the report RPC the
+    // page may be covered or mid-navigation (e.g. auto review redirect),
+    // and looking it up from a stale context trips deactivation asserts.
+    final messenger = ScaffoldMessenger.of(context);
+    bool ok = false;
+    String reason = '';
+    try {
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Report rider'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Reporting a finished trip disables review for this booking.',
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'Describe the issue',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Submit report'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Submit report'),
-          ),
-        ],
-      ),
-    );
-    final reason = reasonCtrl.text.trim();
-    reasonCtrl.dispose();
-    if (ok != true || reason.isEmpty) {
-      if (ok == true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      );
+      ok = result == true;
+      reason = reasonCtrl.text.trim();
+    } finally {
+      reasonCtrl.dispose();
+    }
+    if (!ok || reason.isEmpty) {
+      if (ok && mounted) {
+        messenger.showSnackBar(
           const SnackBar(content: Text('A reason is required.')),
         );
       }
       return;
     }
     try {
-      await ref.read(customerRepositoryProvider).reportDriverBooking(
-            bookingId: booking.id,
-            reason: reason,
-          );
+      await ref
+          .read(customerRepositoryProvider)
+          .reportDriverBooking(bookingId: booking.id, reason: reason);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Rider reported. Review is no longer available.'),
         ),
@@ -134,7 +150,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text(AuthValidators.friendlyError(e))),
       );
     }
@@ -159,132 +175,133 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-                    children: [
-                      const SectionTitle('Bookings'),
-                      const SizedBox(height: 10),
-                      if (_bookings.isEmpty)
-                        Text(
-                          'No bookings yet. Request a driver to get started.',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textMuted,
+          ? Center(child: Text(_error!))
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                children: [
+                  const SectionTitle('Bookings'),
+                  const SizedBox(height: 10),
+                  if (_bookings.isEmpty)
+                    Text(
+                      'No bookings yet. Request a driver to get started.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textMuted,
+                      ),
+                    )
+                  else
+                    ..._bookings.map((b) {
+                      final label = b.displayLabel(_serverNow);
+                      final reviewReady = b.reviewAvailable(_serverNow);
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          title: Text(
+                            b.driverName ?? 'Driver',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
                           ),
-                        )
-                      else
-                        ..._bookings.map((b) {
-                          final label = b.displayLabel(_serverNow);
-                          final reviewReady = b.reviewAvailable(_serverNow);
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: ListTile(
-                              title: Text(
-                                b.driverName ?? 'Driver',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(label),
-                                  if (reviewReady)
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Review Available',
-                                          style: GoogleFonts.plusJakartaSans(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip:
-                                              'Leave one review for this completed booking. PASAKAY does not use GPS or trip tracking.',
-                                          onPressed: () {
-                                            showDialog(
-                                              context: context,
-                                              builder: (_) => AlertDialog(
-                                                title: const Text('About reviews'),
-                                                content: const Text(
-                                                  "You're seeing this review prompt because this booking was confirmed after the driver accepted your request. PASAKAY does not use GPS or trip tracking to verify rides.",
-                                                ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(context),
-                                                    child: const Text('OK'),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                          icon: const Icon(
-                                            Icons.info_outline,
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  if (b.canReportRider)
-                                    TextButton(
-                                      onPressed: () => _reportBooking(b),
-                                      child: Text(
-                                        'Report rider',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          color: AppColors.danger,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(label),
+                              if (reviewReady)
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Review Available',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                ],
-                              ),
-                              trailing: reviewReady
-                                  ? const Icon(Icons.star_rounded,
-                                      color: AppColors.primary)
-                                  : const Icon(Icons.chevron_right),
-                              onTap: () {
-                                if (reviewReady) {
-                                  context.go('/review?bookingId=${b.id}');
-                                } else {
-                                  context.push('/driver/${b.driverId}');
-                                }
-                              },
-                            ),
-                          );
-                        }),
-                      const SizedBox(height: 22),
-                      const SectionTitle('Requests'),
-                      const SizedBox(height: 10),
-                      if (_requests.isEmpty)
-                        Text(
-                          'No requests yet.',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textMuted,
+                                    IconButton(
+                                      tooltip: 'Leave one review for this completed booking. PASAKAY does not use GPS or trip tracking.',
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => AlertDialog(
+                                            title: const Text('About reviews'),
+                                            content: const Text(
+                                              "You're seeing this review prompt because this booking was confirmed after the driver accepted your request. PASAKAY does not use GPS or trip tracking to verify rides.",
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(context),
+                                                child: const Text('OK'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.info_outline,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              if (b.canReportRider)
+                                TextButton(
+                                  onPressed: () => _reportBooking(b),
+                                  child: Text(
+                                    'Report rider',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: AppColors.danger,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                        )
-                      else
-                        ..._requests.map(
-                          (r) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              r.driverName ?? 'Driver',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            subtitle: Text(_requestLabel(r)),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => context.push('/driver/${r.driverId}'),
+                          trailing: reviewReady
+                              ? const Icon(
+                                  Icons.star_rounded,
+                                  color: AppColors.primary,
+                                )
+                              : const Icon(Icons.chevron_right),
+                          onTap: () {
+                            if (reviewReady) {
+                              context.go('/review?bookingId=${b.id}');
+                            } else {
+                              context.push('/driver/${b.driverId}');
+                            }
+                          },
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 22),
+                  const SectionTitle('Requests'),
+                  const SizedBox(height: 10),
+                  if (_requests.isEmpty)
+                    Text(
+                      'No requests yet.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textMuted,
+                      ),
+                    )
+                  else
+                    ..._requests.map(
+                      (r) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          r.driverName ?? 'Driver',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                    ],
-                  ),
-                ),
+                        subtitle: Text(_requestLabel(r)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/driver/${r.driverId}'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }

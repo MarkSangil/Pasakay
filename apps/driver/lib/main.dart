@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers/session_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'services/driver_activity_tracker.dart';
 import 'services/push_notification_service.dart';
 import 'services/supabase_config.dart';
 
@@ -22,11 +23,7 @@ Future<void> main() async {
     await PushNotificationService.initializeFirebase();
   }
 
-  runApp(
-    ProviderScope(
-      child: PasakayDriverApp(initError: initError),
-    ),
-  );
+  runApp(ProviderScope(child: PasakayDriverApp(initError: initError)));
 }
 
 class PasakayDriverApp extends ConsumerWidget {
@@ -48,6 +45,8 @@ class PasakayDriverApp extends ConsumerWidget {
     // Keep session alive for redirects + FCM token registration.
     ref.watch(sessionProvider);
     ref.watch(pushRegistrationProvider);
+    // Foreground-usage tracking for the admin activity dashboard.
+    ref.watch(driverActivityTrackerProvider);
     ref.read(pushNotificationServiceProvider).onOpenRoute = (route) {
       router.go(route);
     };

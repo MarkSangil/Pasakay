@@ -47,15 +47,19 @@ abstract final class AuthValidators {
     return null;
   }
 
-  /// Canonical storage format: `D00-00-000000` (`D` + 10 digits).
-  static String? license(String? value) {
-    final v = _alnum(value);
-    if (v.isEmpty) return 'License number is required';
-    if (!RegExp(r'^[A-Z][0-9]{10}$').hasMatch(v)) {
-      return "License format: D00-00-000000 (e.g. D12-34-567890)";
-    }
+  /// TODA Plate Number: required, freeform (e.g. `SSLTODA No. 00876`).
+  /// Normalization is trim + single-spacing only; no strict format and no
+  /// uniqueness check per business rules.
+  static String? todaPlate(String? value) {
+    final v = _normalizeToda(value);
+    if (v.isEmpty) return 'TODA Plate Number is required';
     return null;
   }
+
+  static String normalizeTodaPlate(String? value) => _normalizeToda(value);
+
+  static String _normalizeToda(String? value) =>
+      (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
 
   /// Canonical storage format: `ABC-1234` (3 letters + 4 digits).
   static String? plate(String? value) {
@@ -108,7 +112,8 @@ abstract final class AuthValidators {
   static String friendlyAuthError(Object error) {
     final text = extractMessage(error);
     final lower = text.toLowerCase();
-    if (lower.contains('invalid login') || lower.contains('invalid credentials')) {
+    if (lower.contains('invalid login') ||
+        lower.contains('invalid credentials')) {
       return 'Incorrect mobile number or password.';
     }
     if (lower.contains('banned') || lower.contains('not allowed')) {

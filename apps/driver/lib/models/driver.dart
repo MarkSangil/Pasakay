@@ -6,10 +6,10 @@ extension ShiftTypeX on ShiftType {
   String get dbValue => name;
 
   String get label => switch (this) {
-        ShiftType.morning => 'Morning',
-        ShiftType.afternoon => 'Afternoon',
-        ShiftType.evening => 'Evening',
-      };
+    ShiftType.morning => 'Morning',
+    ShiftType.afternoon => 'Afternoon',
+    ShiftType.evening => 'Evening',
+  };
 
   static ShiftType fromDb(String value) {
     return ShiftType.values.firstWhere(
@@ -26,7 +26,6 @@ class Driver {
     required this.mobileNumber,
     required this.email,
     this.todaNumber,
-    this.licenseNumber,
     this.plateNumber,
     this.yearsOfService = 0,
     this.assignedTerminalId,
@@ -48,7 +47,6 @@ class Driver {
   final String mobileNumber;
   final String email;
   final String? todaNumber;
-  final String? licenseNumber;
   final String? plateNumber;
   final int yearsOfService;
   final String? assignedTerminalId;
@@ -76,7 +74,6 @@ class Driver {
       mobileNumber: mobileNumber,
       email: email,
       todaNumber: todaNumber,
-      licenseNumber: licenseNumber,
       plateNumber: plateNumber,
       yearsOfService: yearsOfService,
       assignedTerminalId: assignedTerminalId,
@@ -118,8 +115,6 @@ class Driver {
           (json['contact_number'] ?? json['mobile_number'] ?? '') as String,
       email: (json['email'] ?? json['email_address'] ?? '') as String,
       todaNumber: json['toda_number'] as String?,
-      licenseNumber: (json['driver_license_number'] ?? json['license_number'])
-          as String?,
       plateNumber: json['plate_number'] as String?,
       yearsOfService: (json['years_of_service'] as num?)?.toInt() ?? 0,
       assignedTerminalId: terminalId,
@@ -130,7 +125,8 @@ class Driver {
       averageRating: (json['average_rating'] as num?)?.toDouble() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
       isActive: json['is_active'] as bool? ?? true,
-      status: json['status'] as String? ??
+      status:
+          json['status'] as String? ??
           ((json['is_active'] as bool? ?? true) ? 'active' : 'deactivated'),
       statusReason: json['status_reason'] as String?,
       assignedTerminal: assigned,
