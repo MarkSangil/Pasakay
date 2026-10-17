@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,11 +22,22 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
   String _query = '';
   String _status = 'all';
   late Future<_DriverPage> _future;
+  Map<String, DriverActivityState> _liveActivity = {};
+  Timer? _sweepTimer;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    // Sweep every few minutes so a driver who opens the app is reflected
+    // without a manual reload. Runs only while this screen is mounted.
+    _sweepTimer = Timer.periodic(const Duration(minutes: 5), (_) => _sweep());
+  }
+
+  @override
+  void dispose() {
+    _sweepTimer?.cancel();
+    super.dispose();
   }
 
   Future<_DriverPage> _load() async {
@@ -53,6 +66,24 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
     });
   }
 
+  /// Periodic refresh of app-activity states only (lightweight RPC).
+  /// Keeps the App activity column current for recently logged-in drivers
+  /// without re-fetching the whole driver list.
+  Future<void> _sweep() async {
+    if (!mounted) return;
+    try {
+      final states = await ref
+          .read(adminRepositoryProvider)
+          .fetchDriverActivityStates();
+      if (!mounted) return;
+      setState(() {
+        _liveActivity = {for (final s in states) s.driverId: s};
+      });
+    } catch (_) {
+      // Best effort: keep showing the last known states.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_DriverPage>(
@@ -69,6 +100,11 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
         }
         final page = snapshot.data!;
         final query = _query.trim().toLowerCase();
+        // The sweep's live states win over the page-load snapshot so new
+        // driver logins appear in the list without a manual reload.
+        final activityStates = _liveActivity.isNotEmpty
+            ? _liveActivity
+            : page.activityByDriver;
         final drivers = page.drivers.where((d) {
           final matchesStatus = _status == 'all' || d.status == _status;
           final haystack =
@@ -137,7 +173,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
                         for (final driver in drivers)
                           _DriverRow(
                             driver: driver,
-                            activity: page.activityByDriver[driver.id],
+                            activity: activityStates[driver.id],
                             onOpen: () => context.go('/drivers/${driver.id}'),
                             onVerify: () => _verify(driver),
                             onStatus: () => _setStatus(driver),
