@@ -1,0 +1,80 @@
+%% PASAKAY database interactions — reads, writes, RPCs, realtime, push
+flowchart TD
+    subgraph clients["Applications"]
+        CUT["Customer app<br/>direct PostgREST reads +<br/>workflow RPCs"]
+        DRVT["Driver app<br/>direct PostgREST reads +<br/>booking RPCs"]
+        ADM["Admin web<br/>RPC-only reads/writes"]
+    end
+
+    subgraph postgrest["PostgREST (RLS enforced on every access)"]
+        RLSD{"RLS policy check<br/>(auth.uid() ownership,<br/>peer booking,<br/>is_system_admin())"}
+        DENY["0 rows / 401 / 403<br/>UI keeps previous snapshot"]
+    end
+
+    subgraph tables["Database objects touched directly"]
+        TT["terminals, shifts"]
+        DD["drivers<br/>(own row + displayed roster)"]
+        CC["commuters"]
+        RR["ride_requests<br/>(realtime + list reads)"]
+        BB["bookings"]
+        NR["reviews<br/>(commuter inserts own)"]
+        NT["notifications<br/>(recipient reads, mark read)"]
+        DT["device_tokens / commuter_device_tokens<br/>+ register_*_device_token RPC"]
+        FD["commuter_followed_drivers"]
+    end
+
+    subgraph rpcs["RPCs (SECURITY DEFINER)"]
+        W1["register_driver/register_commuter"]
+        W2["create_ride_request,<br/>accept/reject_ride_request,<br/>complete_booking, flag_booking,<br/>report_driver_booking,<br/>submit_booking_review, report_review"]
+        W3["reconcile_ride_workflow<br/>(also pg_cron every minute)"]
+        W4["report_user_audit_log<br/>(role resolved server-side,<br/>insert into user_audit_logs)"]
+        W5["report_driver_activity /<br/>report_commuter_activity<br/>(session chain + heartbeats)"]
+        W6["admin_* functions (24+)<br/>assert_system_admin() inside"]
+        W7["get_login_status,<br/>resolve_auth_email,<br/>is_driver_on_shift,<br/>get_driver_request_context,<br/>list_terminal_shift_drivers,<br/>get_booking_settings,<br/>get_driver_activity_config"]
+    end
+
+    subgraph reactions["Server reactions"]
+        TR1["trg_drivers_notify_changes /<br/>trg_shifts_notify_changes"]
+        TR2["emit_notification -> notifications insert"]
+        TR3["dispatch_notification_push trigger<br/>-> pg_net POST to Edge Functions"]
+        TR4["refresh_driver_rating trigger"]
+        TR5["booking_events journal rows"]
+        EF["send-driver-push /<br/>send-passenger-push<br/>(Forwards to FCM)"]
+        PUSH["Firebase Cloud Messaging<br/>-> app notification tray"]
+    end
+
+    AUD[("user_audit_logs")]
+    ACT[("driver_activity_sessions /<br/>_heartbeats + commuter_*")]
+    ADMV[("Admin dashboard polls:<br/>admin_driver_activity_list,<br/>admin_commuter_activity_list,<br/>admin_user_audit_logs")]
+
+    CUT --> RLSD
+    DRVT --> RLSD
+    ADM --> W6
+    W6 --> RLSD
+
+    RLSD -- authenticated rows --> TT
+    RLSD --> DD
+    RLSD --> CC
+    RLSD --> RR
+    RLSD --> BB
+    RLSD --> NR
+    RLSD --> NT
+    RLSD --> DT
+    RLSD --> FD
+
+    CUT --> W2 --> TR5
+    DRVT --> W2 --> TR5
+    CUT --> W4 --> AUD
+    DRVT --> W4 --> AUD
+    CUT --> W5 --> ACT
+    DRVT --> W5 --> ACT
+    ADM --> W7
+    ADM -. 5-minute UI polling .-> ADMV
+    W3 --> RR
+    W3 --> BB
+
+    TR1 --> TR2
+    TR2 --> NT
+    TR2 --> TR3
+    TR3 --> EF --> PUSH
+    NR --> TR4

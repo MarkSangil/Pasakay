@@ -1,0 +1,71 @@
+%% PASAKAY core workflow — ride request, booking, dispute, review lifecycle
+flowchart TD
+    subgraph commuter["Customer app"]
+        CR1["Commuter opens driver profile"]
+        CR2[" rpc get_driver_request_context<br/>(driver + settings snapshot)"]
+        CR3{"Driver requestable?<br/>(own state, shift,<br/>onboarding, existingMultiride)"}
+        CR4["Request button disabled /<br/>reason shown"]
+        CR5["rpc create_ride_request"]
+        CR6["Realtime channels:<br/>ride_requests + bookings<br/>(commuter_id filter)"]
+        CR7["Waiting screen:<br/>countdown from expires_at"]
+        CR8["Report-the-trip actions:<br/>rpc report_driver_booking<br/>(passenger report when the<br/>trip did not happen,<br/>inside the dispute window)"]
+    end
+
+    subgraph server["PostgreSQL (SECURITY DEFINER RPCs)"]
+        SR1["create_ride_request:<br/>pedantic checks - active commuter,<br/>driver availability + shift,<br/>one PENDING per pair,<br/>cooldown seconds"] --> SR2["INSERT ride_requests(PENDING)<br/>expires_at = now + p_request_expire_minutes<br/>log_booking_event('REQUEST_CREATED')"]
+        SR3{"Driver reacts before<br/>expires_at?"}
+        SRC["Minute tick:<br/>reconcile_ride_workflow<br/>(pg_cron):<br/>PENDING older than expires_at<br/>-> EXPIRED"]
+        SR4["rpc accept_ride_request:<br/>not expired, still PENDING,<br/>caller is the driver"]
+        SR5["ride_requests = ACCEPTED<br/>INSERT bookings(booked)<br/>review_eligible_at =<br/>confirmed_at + p_seconds<br/>log events"]
+        SR6["rpc reject_ride_request<br/>-> REJECTED (or EXPIRED if late)"]
+    end
+
+    subgraph driver["Driver app"]
+        DR1["Bookings tab:<br/>PENDING requests poll +<br/>realtime notifications"]
+        DR2["Accept / Reject buttons"]
+        DR3["Booked booking:<br/>My Trip card"]
+        DR4{"Trip ended?"}
+        DR5["rpc complete_booking<br/>-> status COMPLETED"]
+        DR6{"Dispute?<br/>(within<br/>p_dispute_window_minutes)"}
+        DR7["rpc flag_booking<br/>-> status FLAGGED"]
+        DR9["Booking stays FLAGGED<br/>until admin resolves"]
+    end
+
+    subgraph adminact["Admin web — disputed bookings"]
+        AD1["Admin list FLAGGED bookings:<br/>rpc is_driver_on_shift,<br/>booking events history"]
+        AD2{"rpc<br/>admin_resolve_disputed_booking"}
+        AD3["complete: -> COMPLETED"]
+        AD4["cancel: -> CANCELLED"]
+    end
+
+    subgraph review["Review flow"]
+        RV1["Customer history shows<br/>COMPLETED bookings once<br/>review_eligible_at passed<br/>(reconcile also marks<br/>review-due)"]
+        RV2["rpc submit_booking_review<br/>(completed, commuter owns it,<br/>rating 1-5, optional text,<br/>one review per booking)"]
+        RV3["Trigger refresh_driver_rating<br/>updates drivers.average_rating/<br/>review_count"]
+        RV4["rpc report_review<br/>-> review_reports(OPEN)<br/>(one open per pair)"]
+        RV5["rpc admin_resolve_review_report<br/>-> RESOLVED or DISMISSED"]
+        RV6["Review screen<br/>write + own reviews list"]
+    end
+
+    CR1 --> CR2 --> CR3
+    CR3 -- "No" --> CR4
+    CR3 -- Yes --> CR5 --> SR1 --> SR2 --> CR6 --> CR7
+    CR7 -.-> CRL
+    SR2 --> DR1 --> DR2 --> SR3
+    SR3 -- "Reject" --> SR6
+    SR3 -- "Accept (before expiry)" --> SR4 --> SR5 --> DR3
+    SR3 -- "No action" --> SRC
+    SRC --> CR7
+
+    DR3 --> DR4
+    DR4 -- "Yes" --> DR5
+    DR4 -- "No (dispute)" --> DR6
+    DR6 -- "Yes" --> DR7 --> DR9 --> AD1 --> AD2
+    DR4 -- "Did not make the trip" --> CR8 --> DR9
+
+    AD2 -- "Resolve as completed" --> AD3
+    AD2 -- "Cancel booking" --> AD4
+
+    DR5 --> RV1 --> RV2 --> RV3
+    RV1 --> RV6
+    RV1 -- "Problem with driver review" --> RV4 --> RV5

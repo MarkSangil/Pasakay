@@ -1,0 +1,55 @@
+%% PASAKAY system context — applications, users, external services, database
+flowchart LR
+    subgraph users["Users"]
+        D["SSLTODA driver<br/>(Android app)"]
+        C["Commuter/passenger<br/>(Android app)"]
+        M["System admin<br/>(browser web app)"]
+    end
+
+    subgraph apps["PASAKAY Flutter applications"]
+        DA["Driver app<br/>bookings, ride requests,<br/>shift change request,<br/>reviews, profile"]
+        CA["Customer app<br/>terminals, driver list,<br/>ride request, history,<br/>reviews, follow-driver"]
+        AA["Admin web app<br/>(GitHub Pages)<br/>overview, drivers, commuters,<br/>terminals, shifts, reviews,<br/>disputes, privacy, diagnostics"]
+    end
+
+    subgraph supabase["Supabase project"]
+        AUT["Supabase Auth<br/>(password sign-in,<br/>phone-derived emails)"]
+        PG[("PostgreSQL public schema<br/>26 tables, RLS,<br/>bucket of RPC functions")]
+        RTE["Realtime<br/>(Postgres changes:<br/>notifications, ride_requests,<br/>bookings)"]
+        CRON["pg_cron<br/>every-minute jobs"]
+        EF["Edge Functions<br/>send-driver-push,<br/>send-passenger-push"]
+    end
+
+    subgraph external["External services"]
+        FCM["Firebase Cloud Messaging"]
+        FBF["Firebase Analytics/Info<br/>push support"]
+        PHONE["Device phone dialer<br/>and SMS app"]
+        PAGES["GitHub Pages hosting"]
+    end
+
+    D --> DA
+    C --> CA
+    M --> AA
+    PAGES --> AA
+
+    DA --> AUT
+    DA --> PG
+    DA --> RTE
+    CA --> AUT
+    CA --> PG
+    CA --> RTE
+    AA --> AUT
+    AA --> PG
+
+    DA --> PHONE
+    CA --> PHONE
+
+    PG -- "triggers + pg_net HTTP" --> EF
+    EF -- "FCM pushes" --> FCM
+    FCM --> DA
+    FCM --> CA
+    FBF --> DA
+    FBF --> CA
+
+    CRON -- "process_schedule_notifications()" --> PG
+    CRON -- "reconcile_ride_workflow()" --> PG

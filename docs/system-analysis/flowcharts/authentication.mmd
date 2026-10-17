@@ -1,0 +1,55 @@
+%% PASAKAY authentication — login, registration, admin gate, session outcomes
+flowchart TD
+    start(["User submits login<br/>(mobile + password)"])
+
+    subgraph preludes["Pre-login checks (client AuthService)"]
+        P1["rpc get_login_status(role, mobile)"]
+        P1a{"allowed == false?"}
+        P1e["AuthFlowException:<br/>'pending verification',<br/>'no longer active', etc."]
+        P2["rpc resolve_auth_email(role, mobile)<br/>phone-derived email falls back<br/>if RPC returns nothing"]
+    end
+
+    subgraph supabaseauth["Supabase Auth"]
+        A1["auth.signInWithPassword"]
+        A2{"Credentials valid and<br/>email confirmed?"}
+        A3["AuthException -><br/>friendly error message"]
+    end
+
+    subgraph rolecheck["Client role assertion"]
+        C1{"userMetadata.role<br/>matches this app?"}
+        C2["signOut(), error: wrong app"]
+        C3["SessionProvider state = signed-in user"]
+        C4["fetch profile row<br/>drivers or commuters"]
+        C5{"Profile row found and<br/>status == active?"}
+        C6["Session state = null<br/>(stay on splash / urge re-login)"]
+        C7["Driver only:<br/>rpc is_driver_on_shift"]
+        C8["audit 'Signed in'<br/>(rpc report_user_audit_log)<br/>activity tracker session starts"]
+    end
+
+    subgraph signin["Self-registration (both apps)"]
+        R1["rpc register_driver / register_commuter<br/>(normalize mobile, TODA+plate for driver,<br/>check availability, provision auth user,<br/>create profile row)"]
+        R2["rpc register_driver:<br/>requires valid SSLTODA plate +<br/>terminal selection"]
+        R3["info message:<br/>'Administrator must verify/approve your account'"]
+        R4["App stays on login screen"]
+    end
+
+    subgraph admin["Admin login (web)"]
+        A10["auth.signInWithPassword(email)"]
+        A20{"Session -> fetch admins row<br/>admin_id = uid and is_active?"}
+        A30["signOut, no dashboard"]
+        A40["Admin session<br/>(policy gating via is_system_admin())"]
+    end
+
+    start --> P1
+    P1 --> P1a
+    P1a -- Yes --> P1e --> stop1(["Back to login"])
+    P1a -- No --> P2 --> A1 --> A2
+    A2 -- No --> A3 --> stop1
+    A2 -- Yes --> C1
+    C1 -- "No" --> C2 --> stop1
+    C1 -- Yes --> C3 --> C4 --> C5
+    C5 -- No --> C6
+    C5 -- Yes --> C7 --> C8 --> home(["Main shell screen"])
+    C6 --> stop1
+
+    reg(["User submits signup"]) --> R1 --> R2 --> R3 --> R4

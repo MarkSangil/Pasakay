@@ -1,0 +1,54 @@
+%% PASAKAY application startup — init sequence and route selection
+flowchart TD
+    subgraph mobile["Driver + Customer Android apps"]
+        M1["main():<br/>WidgetsFlutterBinding.ensureInitialized()"]
+        M2{"SupabaseConfig.initialize()<br/>throws?"}
+        M3["initError = caught error"]
+        M4["Firebase initialized<br/>(PushNotificationService)"]
+        M5["runApp(ProviderScope)"]
+        M6{"initError present?"}
+        M7["App build ends in<br/>_ConfigErrorScreen"]
+        M8["watch routerProvider"]
+        M9["watch sessionProvider<br/>(restored Supabase session)"]
+        M10["watch pushRegistrationProvider<br/>(extract FCM token)"]
+        M11["watch activityTrackerProvider"]
+        M12["MaterialApp.router"]
+
+        subgraph routes["GoRouter (direct, no redirect)"]
+            R1["/splash<br/>SplashScreen (initial route)"]
+            S1{"Splash:<br/>Session loading?"}
+            S2{"Driver row /<br/>Commuter row found?"}
+            R2["/login"]
+            R3["Driver: /terminal<br/>Customer: /terminals or /terminal/:id"]
+            R4["Shell (IndexedStack)<br/>bookings/history, recents,<br/>notifications, profile,<br/>reviews"]
+        end
+    end
+
+    subgraph admin["Admin web app"]
+        A1["main(): SupabaseConfig.initialize()"]
+        A2["runApp(ProviderScope)"]
+        A3{"Session has active row<br/>in public.admins?"}
+        A4["/login"]
+        A5["Shell: /overview,<br/>/drivers, /terminals, /shifts,<br/>/commuters, /reviews,<br/>/disputed-bookings, ..."]
+    end
+
+    M1 --> M2
+    M2 -- Yes --> M3
+    M2 -- No --> M4
+    M3 --> M5
+    M4 --> M5
+    M5 --> M6
+    M6 -- Yes --> M7
+    M6 -- No --> M8
+    M8 --> M9
+    M9 --> M10 --> M11 --> M12 --> R1
+    R1 --> S1
+    S1 -- "Yes" --> R2
+    S1 -- "No (data settled)" --> S2
+    S2 -- "Yes" --> R4
+    S2 -- "No" --> R3
+    R3 --> R4
+
+    A1 --> A2 --> A3
+    A3 -- "No" --> A4 --> A5
+    A3 -- "Yes (sign out)" --> A4

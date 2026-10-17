@@ -1,0 +1,66 @@
+%% PASAKAY foreground activity tracking + client audit logging
+flowchart TD
+    subgraph appgen["Driver or Customer app (mirrored implementation)"]
+        T4{"Session change<br/>observed by SessionProvider watch"}
+        T1{"App lifecycle event"}
+        T2["Foreground restore"]
+        T3["App hidden to background"]
+        H1{"Open session?"}
+        H2["rpc report_*_activity(session_id,<br/>'session_start')"]
+        H3["Timer heartbeat every<br/>config seconds:<br/>rpc report_*_activity(session_id,<br/>'heartbeat', beat_id)"]
+        H4["rpc report_*_activity(session_id,<br/>'session_end', end reason)"]
+        T5["UserAuditTrail:<br/>rpc report_user_audit_log<br/>(fire-and-forget, silent failure)<br/>Screens via ScreenAudit mixin:<br/>terminals, bookings, history,<br/>profile, notifications, review...<br/>Actions: signed_in, signed_out,<br/>choose_terminal, call_driver/sms_driver,<br/>submit_report, submit_review,<br/>flag_review, complete_booking"]
+    end
+
+    T4E["Call tracker end: session_end(logout)<br/>+ audit signed_out"]
+
+    subgraph server["PostgreSQL (SECURITY DEFINER)"]
+        S0{"auth.uid() resolves to a<br/>commuters/drivers row?"}
+        S6["Rejected: no session written"]
+        S1{"p_event"}
+        S2["session_start: end stale open<br/>session, INSERT session row"]
+        S3["heartbeat: validate open<br/>session, INSERT heartbeat,<br/>update last_heartbeat_at"]
+        S4["session_end: close session<br/>with end_reason"]
+        ACTS[("*_activity_sessions and<br/>*_activity_heartbeats rows")]
+        S7["report_user_audit_log:<br/>INSERT user_audit_logs"]
+        AUDT[("user_audit_logs")]
+    end
+
+    subgraph adminv["Admin web dashboard"]
+        AS["5-minute UI timer sweep<br/>(Timer.periodic, screen-local)"]
+        AL["admin_driver_activity_list and<br/>admin_commuter_activity_list:<br/>active rows, inactive when<br/>last beat older than timeout,<br/>last seen = max beat"]
+        AU["admin_user_audit_logs:<br/>latest N per user"]
+    end
+
+    T4 -- "Signed in" --> T2
+    T4 -- "Signed out" --> T4E
+    T1 -- "resumed / shown" --> T2
+    T1 -- "hidden / paused" --> T3
+
+    T2 --> H1
+    H1 -- "No open session" --> H2
+    H1 -- "Open session" --> H3
+    T3 --> H4
+
+    T4E --> H4
+    T5 --> S7
+
+    H2 --> S0
+    H3 --> S0
+    H4 --> S0
+    S0 -- "Resolved to user row" --> S1
+    S0 -- "Unknown user" --> S6
+
+    S1 -- "session_start" --> S2
+    S1 -- "heartbeat" --> S3
+    S1 -- "session_end" --> S4
+
+    S2 --> ACTS
+    S3 --> ACTS
+    S4 --> ACTS
+    S7 --> AUDT
+
+    AS --> AL
+    AS --> AU
+    AL -.-> ACTS
+    AU -.-> AUDT
