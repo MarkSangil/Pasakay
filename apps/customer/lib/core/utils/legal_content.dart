@@ -15,10 +15,11 @@ abstract final class LegalContent {
       'Lady Sofia Garcia (Contact Person)',
       'ladysofia.garcia.21@gmail.com',
     ),
-    ResearchContact('Research Team', 'freltrasona0609@gmail.com'),
-    ResearchContact('Research Team', 'stephanie121sadie@gmail.com'),
-    ResearchContact('Research Team', 'arcegamark0414@gmail.com'),
-    ResearchContact('Research Team', 'hanaaudreedominguez@gmail.com'),
+    ResearchContact('Frel Trasona', 'freltrasona0609@gmail.com'),
+    ResearchContact('Stephanie Sadie', 'stephanie121sadie@gmail.com'),
+    ResearchContact('Mark Vincent Joseph Arcega', 'arcegamark0414@gmail.com'),
+    ResearchContact('Hana Audree Dominguez', 'hanaaudreedominguez@gmail.com'),
+    ResearchContact('Robert Andrei Panes', 'rapanes0714@gmail.com'),
   ];
 
   static const terms = <LegalSection>[
@@ -39,7 +40,7 @@ abstract final class LegalContent {
           'application enables users to:\n• View registered SSLTODA drivers\n'
           '• View assigned operating schedules\n• Contact drivers through phone calls\n'
           '• Contact drivers through Short Message Service (SMS)\n\nPASAKAY does '
-          'not provide:\n• Online booking\n• Driver dispatching\n• GPS tracking\n'
+          'not provide:\n• GPS tracking\n'
           '• Navigation services\n• Fare computation\n• Digital payment',
     ),
     LegalSection(
@@ -204,8 +205,6 @@ abstract final class LegalContent {
           'To allow commuters and authorized representatives to contact the driver regarding ride coordination, availability, and other transportation-related concerns.\n\n'
           '• Email (optional)\n'
           'To provide an alternative communication channel for account-related notifications, updates, and other relevant information.\n'
-          '• Plate Number\n'
-          'To help commuters identify the vehicle assigned to the registered driver and distinguish it from other vehicles.\n'
           '• TODA Plate Number\n'
           'To verify the driver\'s association with SSLTODA and help commuters recognize vehicles registered under the association.\n'
           '• Assigned Operating Schedule\n'
