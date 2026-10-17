@@ -555,4 +555,50 @@ class AdminRepository {
     );
     return DriverUsageSummary.fromJson(Map<String, dynamic>.from(raw as Map));
   }
+
+  /// Current foreground-activity state for every commuter (admin dashboard).
+  /// Same shapes [UserActivityState] as the driver list.
+  Future<List<DriverActivityState>> fetchCommuterActivityStates() async {
+    final raw = await _client.rpc('admin_commuter_activity_list');
+    final rows = raw is List ? raw : const [];
+    return rows
+        .map(
+          (e) =>
+              DriverActivityState.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList();
+  }
+
+  /// Foreground-usage totals for one commuter over [from]..[to] (UTC).
+  Future<DriverUsageSummary> fetchCommuterUsageSummary({
+    required String commuterId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final raw = await _client.rpc(
+      'admin_commuter_usage_summary',
+      params: {
+        'p_commuter_id': commuterId,
+        'p_from': from.toUtc().toIso8601String(),
+        'p_to': to.toUtc().toIso8601String(),
+      },
+    );
+    return DriverUsageSummary.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  /// Recent audit-trail entries for one account (driver or commuter).
+  Future<List<AuditLogEntry>> fetchAuditLogs({
+    required String role,
+    required String userId,
+    int limit = 50,
+  }) async {
+    final raw = await _client.rpc(
+      'admin_user_audit_logs',
+      params: {'p_role': role, 'p_user_id': userId, 'p_limit': limit},
+    );
+    final rows = (raw is List ? raw : const []).toList();
+    return rows
+        .map((e) => AuditLogEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
 }

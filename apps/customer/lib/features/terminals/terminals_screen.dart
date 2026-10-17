@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/models.dart';
 
@@ -14,7 +15,10 @@ class TerminalsScreen extends ConsumerStatefulWidget {
   ConsumerState<TerminalsScreen> createState() => _TerminalsScreenState();
 }
 
-class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
+class _TerminalsScreenState extends ConsumerState<TerminalsScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_terminals';
+
   List<Terminal> _terminals = const [];
   bool _loading = true;
   String? _error;

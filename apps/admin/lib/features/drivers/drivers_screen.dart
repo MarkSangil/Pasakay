@@ -56,7 +56,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
       drivers: results[0] as List<DriverRecord>,
       terminals: results[1] as List<TerminalRecord>,
       shifts: results[2] as List<ShiftRecord>,
-      activityByDriver: {for (final s in states) s.driverId: s},
+      activityByDriver: {for (final s in states) s.userId: s},
     );
   }
 
@@ -77,7 +77,7 @@ class _DriversScreenState extends ConsumerState<DriversScreen> {
           .fetchDriverActivityStates();
       if (!mounted) return;
       setState(() {
-        _liveActivity = {for (final s in states) s.driverId: s};
+        _liveActivity = {for (final s in states) s.userId: s};
       });
     } catch (_) {
       // Best effort: keep showing the last known states.

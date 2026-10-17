@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formats.dart';
 import '../../models/booking.dart';
@@ -22,7 +23,11 @@ class BookingDetailsScreen extends ConsumerStatefulWidget {
       _BookingDetailsScreenState();
 }
 
-class _BookingDetailsScreenState extends ConsumerState<BookingDetailsScreen> {
+class _BookingDetailsScreenState extends ConsumerState<BookingDetailsScreen>
+    with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_booking_details';
+
   Booking? _booking;
   bool _loading = true;
   bool _busy = false;
@@ -81,6 +86,11 @@ class _BookingDetailsScreenState extends ConsumerState<BookingDetailsScreen> {
             reason: result.reason,
             details: result.details,
           );
+      unawaited(
+        ref
+            .read(userAuditTrailProvider)
+            .log('submit_report', detail: {'booking_id': widget.bookingId}),
+      );
       if (!mounted) return;
       setState(() => _booking = updated);
       ref.read(bookingsRefreshProvider.notifier).bump();
@@ -101,6 +111,14 @@ class _BookingDetailsScreenState extends ConsumerState<BookingDetailsScreen> {
     final mobile = _booking?.commuterMobile;
     final auth = ref.read(authServiceProvider);
     final ok = call ? await auth.openCall(mobile) : await auth.openSms(mobile);
+    if (ok) {
+      unawaited(
+        ref
+            .read(userAuditTrailProvider)
+            .log(call ? 'call_commuter' : 'sms_commuter',
+                detail: {'booking_id': widget.bookingId}),
+      );
+    }
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,6 +186,11 @@ class _BookingDetailsScreenState extends ConsumerState<BookingDetailsScreen> {
     try {
       final updated =
           await ref.read(driverRepositoryProvider).completeBooking(widget.bookingId);
+      unawaited(
+        ref
+            .read(userAuditTrailProvider)
+            .log('complete_booking', detail: {'booking_id': widget.bookingId}),
+      );
       if (!mounted) return;
       setState(() => _booking = updated);
       ref.read(bookingsRefreshProvider.notifier).bump();

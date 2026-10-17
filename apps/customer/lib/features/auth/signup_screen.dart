@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
@@ -17,7 +18,10 @@ class SignupScreen extends ConsumerStatefulWidget {
   ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends ConsumerState<SignupScreen> {
+class _SignupScreenState extends ConsumerState<SignupScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_signup';
+
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _mobileCtrl = TextEditingController();

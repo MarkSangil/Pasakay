@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/auth_validators.dart';
 import '../../models/models.dart';
 import '../../services/auth_service.dart';
+import '../../services/commuter_activity_tracker.dart';
 import '../../services/customer_repository.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/user_audit_trail.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -79,6 +83,7 @@ class SessionController extends AsyncNotifier<Commuter?> {
       }
       final allowed = await _requireLoginAllowed(commuter);
       state = AsyncData(allowed);
+      unawaited(ref.read(userAuditTrailProvider).log('login'));
     } catch (error) {
       state = const AsyncData(null);
       if (error is AuthFlowException) rethrow;
@@ -155,6 +160,12 @@ class SessionController extends AsyncNotifier<Commuter?> {
   }
 
   Future<void> logout() async {
+    try {
+      // End the activity session while still authenticated (reason: logout).
+      await ref.read(commuterActivityTrackerProvider).endForLogout();
+      // Audit while still authenticated so the entry has a valid identity.
+      unawaited(ref.read(userAuditTrailProvider).log('logout'));
+    } catch (_) {}
     try {
       await ref.read(pushNotificationServiceProvider).stop();
     } catch (_) {}

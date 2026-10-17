@@ -222,9 +222,17 @@ abstract final class LegalContent {
           'limited technical information, including:\n• Device model\n'
           '• Android operating system version\n• Application version\n'
           '• Date and time of application access\n'
+          '• Records of in-app actions (which screens were opened and which '
+          'buttons were used, with the date and time), retained only for the '
+          'research accountability and evaluation purposes described in this '
+          'policy\n'
           '• Crash or error logs (when applicable)\n'
-          'PASAKAY does not collect IP addresses or device identifiers. The technical information collected is limited to what is necessary to monitor application performance, identify errors, and improve functionality.\n'
-          'This information is used only for troubleshooting, system maintenance, and improving application performance.',
+          'PASAKAY does not collect IP addresses or device identifiers. '
+          'The technical information collected is limited to what is necessary '
+          'to monitor application performance, identify errors, and improve '
+          'functionality.\n'
+          'This information is used only for troubleshooting, system '
+          'maintenance, and improving application performance.',
     ),
     LegalSection(
       'Application Permissions',

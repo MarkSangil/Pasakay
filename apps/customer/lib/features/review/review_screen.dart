@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../models/ride_booking.dart';
@@ -18,7 +21,10 @@ class ReviewScreen extends ConsumerStatefulWidget {
   ConsumerState<ReviewScreen> createState() => _ReviewScreenState();
 }
 
-class _ReviewScreenState extends ConsumerState<ReviewScreen> {
+class _ReviewScreenState extends ConsumerState<ReviewScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_review';
+
   final _reviewCtrl = TextEditingController();
   int _rating = 0;
   List<BookingRecord> _eligible = const [];
@@ -89,6 +95,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
             rating: _rating,
             content: _reviewCtrl.text,
           );
+      unawaited(
+        ref
+            .read(userAuditTrailProvider)
+            .log('submit_review', detail: {'booking_id': bookingId}),
+      );
       if (!mounted) return;
       _reviewCtrl.clear();
       setState(() => _rating = 0);

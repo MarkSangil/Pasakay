@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
@@ -16,7 +17,10 @@ class RecentScreen extends ConsumerStatefulWidget {
   ConsumerState<RecentScreen> createState() => _RecentScreenState();
 }
 
-class _RecentScreenState extends ConsumerState<RecentScreen> {
+class _RecentScreenState extends ConsumerState<RecentScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_recent';
+
   List<RecentContact> _items = const [];
   bool _loading = true;
 

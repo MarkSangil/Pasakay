@@ -114,6 +114,8 @@ class _DriverDetailScreenState extends ConsumerState<DriverDetailScreen> {
             _AvailabilityCard(page: page, onSaved: _reload),
             const SizedBox(height: 16),
             _ActivityCard(driverId: page.driver!.id),
+            const SizedBox(height: 16),
+            _AuditLogCard(userId: page.driver!.id, role: 'driver'),
           ],
         );
       },
@@ -571,7 +573,7 @@ class _ActivityCardState extends ConsumerState<_ActivityCard> {
           .fetchDriverActivityStates()
           .then(
             (list) => list
-                .where((s) => s.driverId == widget.driverId)
+                .where((s) => s.userId == widget.driverId)
                 .cast<DriverActivityState?>()
                 .firstOrNull,
           )
@@ -758,4 +760,129 @@ class _ActivityPage {
   final DriverActivityState? state;
   final DriverUsageSummary summary;
   final int days;
+}
+
+/// Audit trail for one account: screen opens + key actions,
+/// most recent first. Read-only; manual refresh.
+class _AuditLogCard extends ConsumerStatefulWidget {
+  const _AuditLogCard({required this.userId, required this.role});
+
+  final String userId;
+  final String role;
+
+  @override
+  ConsumerState<_AuditLogCard> createState() => _AuditLogCardState();
+}
+
+class _AuditLogCardState extends ConsumerState<_AuditLogCard> {
+  late Future<List<AuditLogEntry>> _future;
+  Timer? _sweepTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+    // Periodic refresh so brand-new actions appear without a reload.
+    _sweepTimer = Timer.periodic(const Duration(minutes: 5), (_) => _sweep());
+  }
+
+  @override
+  void dispose() {
+    _sweepTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<List<AuditLogEntry>> _load() {
+    return ref
+        .read(adminRepositoryProvider)
+        .fetchAuditLogs(role: widget.role, userId: widget.userId, limit: 50);
+  }
+
+  Future<void> _sweep() async {
+    try {
+      final next = await _load();
+      if (!mounted) return;
+      setState(() => _future = Future.value(next));
+    } catch (_) {
+      // Best effort: keep showing the last known trail.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DataCard(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Activity log',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Refresh',
+                  onPressed: () => setState(() => _future = _load()),
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Screen opens and key actions recorded in-app. '
+              'Ids/labels only — no message content.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<List<AuditLogEntry>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                final logs = snapshot.data ?? const <AuditLogEntry>[];
+                if (snapshot.hasError) {
+                  return Text(friendlyError(snapshot.error!));
+                }
+                if (logs.isEmpty) {
+                  return const Text(
+                    'No recorded actions yet.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Latest ${logs.length} entries',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final log in logs)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '${formatWhen(log.occurredAt)} · ${log.displayText}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

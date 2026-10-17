@@ -8,14 +8,23 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../models/shift.dart';
+import '../../services/user_audit_trail.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/legal_dialog.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_profile';
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     final driver = session.value;
 
