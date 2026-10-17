@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -542,11 +544,21 @@ class _ActivityCard extends ConsumerStatefulWidget {
 class _ActivityCardState extends ConsumerState<_ActivityCard> {
   int _rangeDays = 7;
   late Future<_ActivityPage> _future;
+  Timer? _sweepTimer;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    // Periodic refresh so logins/heartbeats made after the screen opened
+    // are reflected without leaving the page.
+    _sweepTimer = Timer.periodic(const Duration(minutes: 5), (_) => _sweep());
+  }
+
+  @override
+  void dispose() {
+    _sweepTimer?.cancel();
+    super.dispose();
   }
 
   Future<_ActivityPage> _load() async {
@@ -583,6 +595,21 @@ class _ActivityCardState extends ConsumerState<_ActivityCard> {
       _rangeDays = days;
       _future = _load();
     });
+  }
+
+  /// Periodic refresh of the activity state + usage summary. Best effort:
+  /// the sweep never blanks the card on a transient failure.
+  Future<void> _sweep() async {
+    if (!mounted) return;
+    try {
+      final next = await _load();
+      if (!mounted) return;
+      setState(() {
+        _future = Future.value(next);
+      });
+    } catch (_) {
+      // Keep showing the previous data on failure.
+    }
   }
 
   @override
