@@ -1,0 +1,118 @@
+%% PASAKAY — full user journey: every major click from signup to admin review, all three apps
+flowchart TD
+    subgraph reg["1 · SIGN UP (customer or driver app)"]
+        U1["Click Create account<br/>(Signup screen)"]
+        U2{"Driver or passenger?"}
+        U3["Passenger form:<br/>name · mobile · email · password"]
+        U4["Driver form:<br/>name · mobile · email · password ·<br/>SSLTODA plate · terminal"]
+        U5["rpc register_commuter / register_driver<br/>(validates, provisions auth user,<br/>profile row with status pending)"]
+        U6["Info screen:<br/>'wait for admin approval'"]
+        U7["Admin approves later:<br/>Drivers screen → Verify TODA plate / Set active<br/>or Commuters screen → Approve"]
+    end
+
+    subgraph login["2 · LOG IN (daily use)"]
+        L1["Enter mobile + password<br/>→ Click Log in"]
+        L2{"get_login_status<br/>allows this account?"}
+        L3["Blocked message<br/>(pending / suspended)"]
+        L4{"Supabase password<br/>correct?"}
+        L5["Wrong password error"]
+        L6{"Role matches<br/>this app?"}
+        L7["'Use the other app'"]
+        L8["Session starts:<br/>audit log 'login',<br/>activity session opens,<br/>FCM token registers"]
+    end
+
+    subgraph customer["3 · CUSTOMER APP main shell (tabs at the bottom)"]
+        C1["Terminals tab<br/>(opens by default)"]
+        C2["Click terminal tile<br/>→ /terminal/:id"]
+        C3["Driver list for that terminal<br/>(filter by shift)"]
+        C4{"Click a driver card"}
+        C5["Driver profile /terminal driver/:id<br/>TODA plate · rating · follow button"]
+        C6{"What does the commuter click?"}
+        C7["Click Call → device dialer opens<br/>(audit: call_driver)"]
+        C8["Click SMS → Messages app opens<br/>(audit: sms_driver)"]
+        C9["Click Request a ride<br/>→ rpc create_ride_request"]
+        C10["Waiting screen<br/>(live countdown)"]
+        C11["Realtime:<br/>request ACCEPTED/REJECTED"]
+        C12["History tab<br/>(bookings list)"]
+        C13["Review tab<br/>(own reviews, submit new)"]
+        C14["Notifications tab<br/>(push + in-app, mark read)"]
+        C15["Profile tab<br/>(edit info, change password, follow list)"]
+    end
+
+    subgraph driverapp["4 · DRIVER APP main shell"]
+        D1["Clicks terminal at first launch<br/>→ /terminal (audit: choose_terminal)"]
+        D2["Bookings tab (home):<br/>PENDING ride requests appear<br/>(realtime + poll)"]
+        D3{"Click Accept?"}
+        D4["rpc accept_ride_request<br/>→ booking created (BOOKED)"]
+        D5["Click Reject"]
+        D6["rpc reject_ride_request → REJECTED"]
+        D7["My Trip card:<br/>active booking with commuter"]
+        D8{"Trip finished?"}
+        D9["Click Complete → rpc complete_booking<br/>(status COMPLETED, review window opens)"]
+        D10["Commute went wrong? Click Flag<br/>→ rpc flag_booking (status FLAGGED)"]
+        D11["Recents tab · Reviews tab<br/>· Notifications tab · Profile tab"]
+    end
+
+    subgraph after["5 · AFTER THE TRIP (customer app)"]
+        A1["History shows COMPLETED trip<br/>(Review button lights up when<br/>review window opens)"]
+        A2["Click Review → rate 1-5 + text<br/>→ rpc submit_booking_review"]
+        A3["Trigger updates driver's<br/>average rating + review count"]
+        A4{"Problem with the result?<br/>Click report (inside window)"}
+        A5["Booking goes FLAGGED<br/>(driver) / passenger report<br/>(customer: report_driver_booking)"]
+    end
+
+    subgraph admin["6 · ADMIN DASHBOARD (admin web · every admin action is audited server-side)"]
+        M1["Log in (email + password)<br/>→ admins row check"]
+        M2["Overview: live counters,<br/>booking metrics"]
+        M3["Drivers: list + Live activity column<br/>(5-minute auto sweep)"]
+        M4{"Click a driver"}
+        M5["Driver detail:<br/>edit info · verify TODA plate ·<br/>reset password · suspend/activate ·<br/>usage card + activity log card"]
+        M6["Commuters: list + activity<br/>· approve/suspend · reset password"]
+        M7["Terminals / Shifts screens:<br/>add, rename, delete (guarded),<br/>edit shift times, approve shift requests"]
+        M8["Reviews screen:<br/>hide or delete a review"]
+        M9["Disputed bookings:<br/>FLAGGED queue"]
+        M10{"Click Resolve"}
+        M11["Complete → booking COMPLETED<br/>Cancel → booking CANCELLED<br/>(also resolve review reports)"]
+        M12["Privacy / Diagnostics screens<br/>(privacy requests, device logs, audit)"]
+    end
+
+    U1 --> U2
+    U2 -- "Passenger" --> U3 --> U5 --> U6
+    U2 -- "Driver" --> U4 --> U5 --> U6
+    U6 -.-> U7
+
+    U7 --> L1 --> L2
+    L2 -- "No" --> L3 --> L1
+    L2 -- "Yes" --> L4
+    L4 -- "No" --> L5 --> L1
+    L4 -- "Yes" --> L6
+    L6 -- "No" --> L7
+    L6 -- "Yes" --> L8
+
+    L8 --> C1
+    C1 --> C2 --> C3 --> C4 --> C5 --> C6
+    C6 -- "Call" --> C7
+    C6 -- "SMS" --> C8
+    C6 -- "Ride request" --> C9 --> C10 --> C11
+    C6 -.-> C12 & C13 & C14 & C15
+
+    L8 --> D1 --> D2 --> D3
+    D3 -- "Yes" --> D4 --> D7 --> D8
+    D3 -- "Reject" --> D5 --> D6 --> D2
+    D8 -- "Fine" --> D9
+    D8 -- "Dispute" --> D10
+    D9 --> D11
+
+    C11 -.-> D2
+    C12 --> A1 --> A2 --> A3
+    A1 --> A4 -- "Yes" --> A5
+    D9 --> A1
+
+    U7 --> M1 --> M2
+    M2 --> M3 --> M4 --> M5
+    M3 -.-> M6
+    M2 -.-> M7 & M8
+    D10 -.-> M9
+    A5 -.-> M9
+    M9 --> M10 --> M11
+    M9 -.-> M12

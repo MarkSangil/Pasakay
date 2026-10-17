@@ -21,6 +21,7 @@ diagram and schema element is anchored to inspected sources in
 | Path | Purpose |
 |---|---|
 | `flowcharts/system-context.mmd` | Applications, users, external services (Supabase, FCM, device dialer/SMS), how they connect |
+| `flowcharts/end-to-end-flow.mmd` | **The one-page "whole flow": every major click from signup → login → customer browsing/ride → driver accept/complete → review/dispute → admin actions** |
 | `flowcharts/application-startup.mmd` | `main()` init order, provider wiring, splash-based routing, admin session check |
 | `flowcharts/authentication.mmd` | Login (pre-login gate → auth → role/profile checks), self-registration with admin approval, admin sign-in |
 | `flowcharts/core-workflows.mmd` | The ride lifecycle: request → accept/reject → booking → complete/dispute → review/report, with server-side validation and expiry paths |
