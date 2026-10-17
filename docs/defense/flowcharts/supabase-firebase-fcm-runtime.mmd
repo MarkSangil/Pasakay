@@ -1,0 +1,72 @@
+%% PASAKAY - Runtime notification delivery: what happens when a push is sent
+%% (companion to supabase-firebase-fcm-implementation.mmd; stages E-G of the build)
+%% Every code path in this diagram is verified in the repository except the
+%% final "banner on device screen" hop, which no repo artifact can prove.
+flowchart TD
+
+  subgraph TRIGGER["A triggering event (server side)"]
+    T1["Something happens in a workflow:<br/>ride request created / accepted,<br/>booking completed, review posted,<br/>schedule day starting (cron)"]
+    T2{"Per-user preference enabled?<br/>(driver_notification_preferences /<br/>commuter_notification_preferences)"}
+    T2X["No notification row is created -<br/>user opted out of this category"]
+    T3["emit_notification() validates,<br/>dedupes via dedupe_key,<br/>INSERTs one row into notifications"]
+    T1 --> T2
+    T2 -- "enabled" --> T3
+    T2 -- "disabled" --> T2X
+  end
+
+  subgraph DBDISPATCH["Database dispatch (automatic, inside Postgres)"]
+    R1["Trigger trg_notifications_dispatch_push<br/>runs AFTER INSERT for each row"]
+    R2{"Vault secret<br/>notification_push_webhook_secret<br/>present?"}
+    R2X["Warning logged, dispatch skipped -<br/>transaction not failed;<br/>in-app row + Realtime still deliver"]
+    R3["pg_net net.http_post (async, 5 s timeout)<br/>Authorization: Bearer <shared secret><br/>URL chosen by recipient_type:<br/>driver -> /functions/v1/send-driver-push<br/>commuter -> /functions/v1/send-passenger-push"]
+    R1 --> R2
+    R2 -- "yes" --> R3
+    R2 -- "no" --> R2X
+  end
+
+  subgraph FN["Edge Function (deno on Supabase)"]
+    F1["Shared-secret or service-role<br/>Bearer check"]
+    F1X{"Authorized?"}
+    F1XX["401 Unauthorized -<br/>verified live response"]
+    F2["Normalize payload; if only notification_id<br/>was provided, load the row via<br/>service-role client"]
+    F3{"Tokens exist in<br/>device_tokens / commuter_device_tokens<br/>for this recipient?"}
+    F3X["Response: ok, sent 0,<br/>'no device tokens'"]
+    F4["Build RS256 JWT from the stored<br/>Firebase service-account JSON<br/>-> exchange at Google OAuth2<br/>(scope: firebase.messaging)"]
+    F4X{"Service account secret<br/>valid + present?"}
+    F4XX["500 error -<br/>'Missing ...SERVICE_ACCOUNT_JSON'<br/>-> push silently not sent"]
+    F5["POST https://fcm.googleapis.com/v1/projects/<br/>{projectId}/messages:send with the device token,<br/>notification + data payload,<br/>android priority HIGH, channel pasakay_*_alerts"]
+    F6{"FCM response ok<br/>for each token?"}
+    F6X["Response detail logged in the<br/>function result; UNREGISTERED /<br/>INVALID_ARGUMENT tokens are deleted<br/>from the token table (self-cleaning)"]
+    F7["Response: ok, sent / failed counts<br/>(an HTTP 200 here is SERVER-LEVEL proof,<br/>not device-screen proof)"]
+    F1 --> F1X
+    F1X -- "yes" --> F2
+    F1X -- "no" --> F1XX
+    F2 --> F3
+    F3 -- "yes" --> F4
+    F3 -- "no" --> F3X
+    F4 --> F4X
+    F4X -- "yes" --> F5
+    F4X -- "no" --> F4XX
+    F5 --> F6
+    F6 -- "ok" --> F7
+    F6 -- "error" --> F6X
+  end
+  R3 --> F1
+
+  subgraph DEVICE["Android app (recipient)"]
+    M1["FCM SDK delivers the message.<br/>App in background/terminated: Android shows the<br/>system-tray banner using the manifest's default<br/>channel + icon (payload carries a notification block)"]
+    M2{"App in foreground?"}
+    M3["FCM notification suppressed by Android -<br/>onMessage listener fires instead:"]
+    M4["Local heads-up built through<br/>flutter_local_notifications on the<br/>pasakay_*_alerts channel - debounced 4 s.<br/>Supabase Realtime INSERT is a second source<br/>that also raises the same heads-up"]
+    M5["Tap handling (both paths):<br/>onMessageOpenedApp / getInitialMessage /<br/>local-notification payload -><br/>NotificationEventType.routeFor() -><br/>router.go(route) opens the relevant screen"]
+    M6["Token lifecycle safety net:<br/>onTokenRefresh re-registers;<br/>logout (stop()) deletes the token;<br/>app kill keeps the token for later pushes"]
+    M2 -- "yes" --> M3 --> M4
+    M2 -- "no" --> M1
+    M1 --> M5
+    M4 --> M5
+    M5 --> M6
+  end
+  F7 -.device token targeting.-> M1
+
+  VERIFY["FINAL browser-of-record status:<br/>pipeline verified by code + deployed-function 401 checks;<br/>END-TO-END banner receipt on a real device is UNVERIFIED<br/>inside this repo - verify with the README manual test send"]
+  M6 --> VERIFY

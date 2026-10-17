@@ -1,0 +1,71 @@
+%% PASAKAY - Stage A-D: how the Supabase + Firebase FCM integration was BUILT
+%% (implementation chronology as verified in the repository, commit 2dd47b5)
+%% Companion diagram: supabase-firebase-fcm-runtime.mmd (what happens at notification time)
+flowchart TD
+
+  subgraph DEV["Stage A - Development environment (Flutter toolchain)"]
+    A1["1. Flutter app project per role<br/>apps/driver + apps/customer<br/>Dart SDK ^3.13.2 (pubspec.yaml)"]
+    A2["2. Add Firebase packages<br/>firebase_core ^4, firebase_messaging ^16,<br/>flutter_local_notifications ^19"]
+    A3["3. Android build wiring<br/>com.google.gms.google-services Gradle plugin,<br/>minSdk 23, INTERNET + POST_NOTIFICATIONS permissions,<br/>default notification channel + icon meta-data"]
+    A1 --> A2 --> A3
+  end
+
+  subgraph FB["Stage B - Firebase console (one project per role)"]
+    B1["4. Create two Firebase projects<br/>pasakay-9c97c (driver app)<br/>pasakay-passenger (customer app)"]
+    B2{"5. Register each Android app by<br/>package name?<br/>com.pasakay.pasakay_driver<br/>com.pasakay.pasakay_customer"}
+    B2 -- "names match build.gradle.kts" --> B3["6. Download google-services.json<br/>into android/app/ of each app"]
+    B2 -- "mismatch" --> B2X["Gradle google-services task fails -<br/>fix package name and retry"]
+    B1 --> B2
+    A3 --> B1
+  end
+
+  subgraph SUPA["Stage C - Supabase backend (tables, functions, trigger)"]
+    C1["7. Device-token tables<br/>device_tokens + commuter_device_tokens<br/>FK to driver/commuter ON DELETE CASCADE,<br/>platform check, RLS owner-only policies"]
+    C2["8. Token registration RPCs<br/>register_driver_device_token /<br/>register_commuter_device_token<br/>(SECURITY DEFINER, role from auth.uid(),<br/>upsert-on-token, active-driver eligibility check)"]
+    C3["9. Notification sources<br/>emit_notification (preferences + dedupe_key),<br/>notify_driver helper, schedule processor cron,<br/>ride/review workflow functions"]
+    C4{"10. Shared secret in Vault?<br/>name: notification_push_webhook_secret<br/>(value never in code)"}
+    C4X["Trigger logs a warning and<br/>skips push until secret exists<br/>(in-app rows and realtime still work)"]
+    C5["11. pg_net dispatch trigger<br/>trg_notifications_dispatch_push AFTER INSERT<br/>on notifications -> async HTTP POST to<br/>Edge Function URL chosen by recipient_type"]
+    C1 --> C2 --> C3 --> C4
+    C4 -- "yes" --> C5
+    C4 -- "no" --> C4X
+    B3 --> C1
+  end
+
+  subgraph EDGE["Stage D - Edge Functions (deno code in repo + secrets in dashboard)"]
+    D1["12. Write two Edge Functions<br/>apps/admin/supabase/functions/<br/>send-driver-push/index.ts (306 lines)<br/>send-passenger-push/index.ts (295 lines)"]
+    D2{"13. Dashboard secrets set?<br/>FIREBASE_(PASSENGER_)SERVICE_ACCOUNT_JSON<br/>NOTIFICATION_PUSH_SECRET<br/>(same value as the Vault secret)"}
+    D2X["Function deployment.<br/>401 answers prove functions are deployed<br/>and reject unauthenticated calls"]
+    D3["14. Deploy functions<br/>(URL live: /functions/v1/send-driver-push<br/>and /functions/v1/send-passenger-push)"]
+    C5 --> D1
+    D1 --> D2
+    D2 -- "yes" --> D3
+    D2 -- "secret missing at call time" --> D2E["Runtime 500:<br/>'Missing FIREBASE...SERVICE_ACCOUNT_JSON'<br/>- push silently not sent"]
+    D2X -.-> D3
+  end
+
+  FM["Stage E connection - not an automatic integration:<br/>Postgres (pg_net) --HTTP POST + Bearer secret--> Edge Function<br/>--OAuth2 JWT from service account--> FCM HTTP v1 API<br/>--device token targeting--> Android app"]
+  D3 --> FM
+
+  subgraph APP["Stage F - In-app integration (Dart, verified in services)"]
+    F1["15. Initialize Firebase at app start<br/>PushNotificationService.initializeFirebase()<br/>+ background handler registered<br/>(apps/*/lib/main.dart)"]
+    F2["16. On active session: startForDriver /<br/>startForCommuter in session_provider"]
+    F3{"17. Ask permission<br/>(Android 13+ POST_NOTIFICATIONS prompt<br/>via FCM + local notifications)"}
+    F3X["Denied: app continues without banner pushes -<br/>token may still be persisted"]
+    F4["18. getToken() -> persist via register RPC<br/>(fallback: direct RLS upsert;<br/>both failures: log only, no crash)"]
+    F5["19. Keep listeners alive:<br/>onTokenRefresh re-persists token;<br/>onMessage builds a local heads-up notification;<br/>onMessageOpenedApp + getInitialMessage -><br/>route tap to the right screen"]
+    F1 --> F2 --> F3
+    F3 -- "granted" --> F4
+    F3 -- "denied" --> F3X --> F4
+    F4 --> F5
+  end
+  FM --> F1
+
+  subgraph VERIFY["Stage G - Testing and verification status"]
+    V1["20. Automated tests (all passing)<br/>driver 10/10, customer 9/9, admin 8/8 -<br/>incl. deep-link routing + dedupe-key unit tests"]
+    V2["21. Build evidence<br/>flutter analyze 0 errors;<br/>debug APKs compile with Firebase packages"]
+    V3["22. Live checks<br/>both function URLs answer 401 without auth<br/>(deployed + auth enforced);<br/>DB password rotated - fresh catalog check this session not possible"]
+    V4["23. UNVERIFIED gap<br/>actual FCM delivery to a device is<br/>not evidenced inside the repository;<br/>README documents a manual test send<br/>(notify_driver SQL + curl)"]
+    V1 --> V2 --> V3 --> V4
+    F5 --> V1
+  end
