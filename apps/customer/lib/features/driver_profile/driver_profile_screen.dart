@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
@@ -24,7 +25,11 @@ class DriverProfileScreen extends ConsumerStatefulWidget {
       _DriverProfileScreenState();
 }
 
-class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
+class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
+    with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_driver_profile';
+
   DriverSummary? _driver;
   DriverRequestContext? _ctx;
   bool _loading = true;
@@ -230,6 +235,14 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     final ok = channel == 'call'
         ? await auth.openCall(phone)
         : await auth.openSms(phone);
+    if (ok) {
+      unawaited(
+        ref.read(userAuditTrailProvider).log(
+          channel == 'call' ? 'call_driver' : 'sms_driver',
+          detail: {'driver_id': driver.id},
+        ),
+      );
+    }
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -261,6 +274,14 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
             reason: result.reason,
             details: result.details,
           );
+      unawaited(
+        ref.read(userAuditTrailProvider).log(
+          'submit_report',
+          detail: {
+            'driver_id': _driver?.id ?? '',
+          },
+        ),
+      );
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(

@@ -69,4 +69,25 @@ void main() {
     // Suspended was replaced by Deactivated (same effect: blocked login).
     expect(statusLabel('suspended'), 'Deactivated');
   });
+
+  group('AuditLogEntry', () {
+    test('parses logs and accepts driver_id or commuter_id keys', () {
+      final entry = AuditLogEntry.fromJson({
+        'log_id': 'd1',
+        'action': 'call_driver',
+        'detail': {'driver_id': 'a1', 'note': null},
+        'occurred_at': '2026-10-17T02:00:00.000Z',
+      });
+      expect(entry.action, 'call_driver');
+      expect(entry.detail, {'driver_id': 'a1'});
+      expect(entry.displayText, contains('Called driver'));
+      expect(entry.displayText, contains('driver id: a1'));
+    });
+
+    test('action labels cover screens and known actions', () {
+      expect(auditActionLabel('screen_driver_list'), 'Opened Driver List');
+      expect(auditActionLabel('logout'), 'Signed out');
+      expect(auditActionLabel('screen_login'), 'Opened Login');
+    });
+  });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -9,6 +10,7 @@ import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/legal_dialog.dart';
+import '../../services/user_audit_trail.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -17,7 +19,10 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_login';
+
   final _formKey = GlobalKey<FormState>();
   final _mobileCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();

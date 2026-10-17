@@ -9,12 +9,21 @@ import '../../core/utils/auth_validators.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/legal_dialog.dart';
+import '../../services/user_audit_trail.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_profile';
+
+  @override
+  Widget build(BuildContext context) {
     final commuter = ref.watch(sessionProvider).value;
 
     return Scaffold(

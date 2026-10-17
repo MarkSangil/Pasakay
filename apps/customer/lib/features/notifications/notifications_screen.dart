@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/notification_event_type.dart';
 import '../../widgets/common_widgets.dart';
@@ -16,7 +17,11 @@ class NotificationsScreen extends ConsumerStatefulWidget {
       _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
+    with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_notifications';
+
   List<Map<String, dynamic>> _items = const [];
   bool _loading = true;
 

@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/utils/uuid.dart';
 import '../models/booking.dart';
 import '../models/driver.dart';
 import '../models/review.dart';
@@ -203,6 +204,21 @@ class DriverRepository {
       },
     );
     return Map<String, dynamic>.from(raw as Map);
+  }
+
+  /// Reports one audit entry (screen open / key action).
+  /// Identity + role are resolved server-side from the authenticated
+  /// session; [logId] is client-generated so retries are idempotent.
+  /// [detail] stays to small id/name labels (max 500 chars server-side).
+  Future<void> reportAudit({
+    required String action,
+    Map<String, String>? detail,
+  }) async {
+    await _client.rpc('report_user_audit_log', params: {
+      'p_log_id': generateUuidV4(),
+      'p_action': action,
+      'p_detail': (detail == null || detail.isEmpty) ? null : detail,
+    });
   }
 
   Future<Map<String, int>> fetchBookingSettings() async {

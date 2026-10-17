@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/driver_activity_tracker.dart';
 import '../../services/driver_repository.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/user_audit_trail.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -79,6 +82,7 @@ class SessionController extends AsyncNotifier<Driver?> {
       }
       final allowed = await _requireLoginAllowed(driver);
       state = AsyncData(allowed);
+      unawaited(ref.read(userAuditTrailProvider).log('login'));
     } catch (error) {
       state = const AsyncData(null);
       if (error is AuthFlowException) rethrow;
@@ -155,6 +159,11 @@ class SessionController extends AsyncNotifier<Driver?> {
 
   Future<void> selectTerminal(String terminalId) async {
     await ref.read(authServiceProvider).updateCurrentTerminal(terminalId);
+    unawaited(
+      ref
+          .read(userAuditTrailProvider)
+          .log('choose_terminal', detail: {'terminal_id': terminalId}),
+    );
     await refresh();
   }
 
@@ -174,6 +183,8 @@ class SessionController extends AsyncNotifier<Driver?> {
     try {
       // End the activity session while still authenticated (reason: logout).
       await ref.read(driverActivityTrackerProvider).endForLogout();
+      // Audit while still authenticated so the entry has a valid identity.
+      unawaited(ref.read(userAuditTrailProvider).log('logout'));
     } catch (_) {}
     try {
       await ref.read(pushNotificationServiceProvider).stop();

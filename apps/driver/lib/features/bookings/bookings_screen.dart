@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formats.dart';
 import '../../models/booking.dart';
@@ -22,7 +23,10 @@ class BookingsScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingsScreenState extends ConsumerState<BookingsScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver, ScreenAudit {
+  @override
+  String get auditScreen => 'screen_bookings';
+
   late final TabController _tabs;
   List<RideRequest> _requests = const [];
   List<Booking> _bookings = const [];
@@ -172,6 +176,11 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
             reason: result.reason,
             details: result.details,
           );
+      unawaited(
+        ref
+            .read(userAuditTrailProvider)
+            .log('submit_report', detail: {'booking_id': booking.id}),
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Booking reported for review.')),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/auth_validators.dart';
 import '../../models/ride_booking.dart';
@@ -16,7 +17,10 @@ class HistoryScreen extends ConsumerStatefulWidget {
   ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+class _HistoryScreenState extends ConsumerState<HistoryScreen> with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_history';
+
   List<RideRequest> _requests = const [];
   List<BookingRecord> _bookings = const [];
   DateTime _serverNow = DateTime.now().toUtc();

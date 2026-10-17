@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formats.dart';
 import '../../models/booking.dart';
@@ -16,7 +17,10 @@ class RecentsScreen extends ConsumerStatefulWidget {
 }
 
 class _RecentsScreenState extends ConsumerState<RecentsScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ScreenAudit {
+  @override
+  String get auditScreen => 'screen_recents';
+
   late final TabController _tabs;
   List<Booking> _today = const [];
   List<Booking> _yesterday = const [];

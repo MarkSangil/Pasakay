@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
@@ -22,7 +23,11 @@ class DriverListScreen extends ConsumerStatefulWidget {
   ConsumerState<DriverListScreen> createState() => _DriverListScreenState();
 }
 
-class _DriverListScreenState extends ConsumerState<DriverListScreen> {
+class _DriverListScreenState extends ConsumerState<DriverListScreen>
+    with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_driver_list';
+
   List<Shift> _shifts = const [];
   List<DriverSummary> _drivers = const [];
   String? _selectedShiftId;

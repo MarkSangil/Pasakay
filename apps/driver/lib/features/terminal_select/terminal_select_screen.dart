@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/providers/session_provider.dart';
+import '../../services/user_audit_trail.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/terminal.dart';
 
@@ -17,7 +18,11 @@ class TerminalSelectScreen extends ConsumerStatefulWidget {
       _TerminalSelectScreenState();
 }
 
-class _TerminalSelectScreenState extends ConsumerState<TerminalSelectScreen> {
+class _TerminalSelectScreenState extends ConsumerState<TerminalSelectScreen>
+    with ScreenAudit {
+  @override
+  String get auditScreen => 'screen_terminal_select';
+
   List<Terminal> _terminals = const [];
   bool _loading = true;
   String? _error;

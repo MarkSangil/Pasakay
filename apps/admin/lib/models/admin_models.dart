@@ -681,14 +681,15 @@ class BookingSettings {
   }
 }
 
-/// Current foreground-activity state of one driver (admin list + detail).
+/// Current foreground-activity state of one account — driver or commuter
+/// (admin list + detail).
 ///
 /// States: `active_now` (open session, heartbeat within timeout, account
 /// active), `inactive` (stale or background-ended), `offline` (explicit
 /// logout, nothing after), `unknown` (no activity rows at all).
-class DriverActivityState {
-  const DriverActivityState({
-    required this.driverId,
+class UserActivityState {
+  const UserActivityState({
+    required this.userId,
     required this.fullName,
     required this.accountStatus,
     required this.state,
@@ -696,7 +697,7 @@ class DriverActivityState {
     this.currentActiveSeconds,
   });
 
-  final String driverId;
+  final String userId;
   final String fullName;
   final String accountStatus;
   final String state;
@@ -706,9 +707,9 @@ class DriverActivityState {
   static DateTime? _dt(Object? v) =>
       v == null ? null : DateTime.tryParse(v.toString());
 
-  factory DriverActivityState.fromJson(Map<String, dynamic> json) {
-    return DriverActivityState(
-      driverId: json['driver_id'] as String,
+  factory UserActivityState.fromJson(Map<String, dynamic> json) {
+    return UserActivityState(
+      userId: (json['driver_id'] ?? json['commuter_id'] ?? '') as String,
       fullName: json['full_name'] as String? ?? 'Driver',
       accountStatus: json['account_status'] as String? ?? 'unknown',
       state: json['activity_state'] as String? ?? 'unknown',
@@ -723,6 +724,91 @@ class DriverActivityState {
     'offline' => 'Offline',
     _ => 'Unknown',
   };
+}
+
+/// Back-compat alias: the same model is used for commuter activity.
+typedef DriverActivityState = UserActivityState;
+
+/// One recorded audit-trail entry (screen open or key action).
+class AuditLogEntry {
+  const AuditLogEntry({
+    required this.logId,
+    required this.action,
+    required this.detail,
+    required this.occurredAt,
+  });
+
+  final String logId;
+  final String action;
+  final Map<String, String> detail;
+  final DateTime occurredAt;
+
+  factory AuditLogEntry.fromJson(Map<String, dynamic> json) {
+    final raw = json['detail'];
+    return AuditLogEntry(
+      logId: (json['log_id'] ?? '').toString(),
+      action: (json['action'] ?? '').toString(),
+      detail: raw is Map
+          ? Map.fromEntries(
+              raw.entries
+                  .where((e) => e.value != null)
+                  .map((e) => MapEntry(e.key.toString(), e.value.toString())),
+            )
+          : const {},
+      occurredAt: DateTime.parse(json['occurred_at'].toString()),
+    );
+  }
+
+  /// Human sentence for the admin UI, e.g. "Opened Driver List · driver: Juan".
+  String get displayText {
+    final label = auditActionLabel(action);
+    final extra = detail.entries
+        .where((e) => e.value.trim().isNotEmpty)
+        .map((e) => '${_prettyKey(e.key)}: ${e.value}')
+        .join(' · ');
+    return extra.isEmpty ? label : '$label · $extra';
+  }
+
+  static String _prettyKey(String key) => switch (key) {
+    'driver_id' => 'driver id',
+    'commuter_id' => 'passenger id',
+    'booking_id' => 'booking id',
+    'review_id' => 'review id',
+    'terminal_id' => 'terminal id',
+    _ => key.replaceAll('_', ' '),
+  };
+}
+
+/// Friendly label for a raw audit action code.
+String auditActionLabel(String action) {
+  final named = <String, String>{
+    'login': 'Signed in',
+    'logout': 'Signed out',
+    'call_driver': 'Called driver',
+    'sms_driver': 'Texted driver',
+    'call_commuter': 'Called passenger',
+    'sms_commuter': 'Texted passenger',
+    'submit_report': 'Submitted a report',
+    'submit_review': 'Submitted a review',
+    'flag_review': 'Flagged a review',
+    'complete_booking': 'Finished a booking',
+    'choose_terminal': 'Chose a terminal',
+  };
+  return named[action] ??
+      (action.startsWith('screen_')
+          ? 'Opened ${_humanize(action.replaceFirst('screen_', ''))}'
+          : _humanize(action));
+}
+
+String _humanize(String code) {
+  if (code.isEmpty) return 'Activity';
+  final spaced = code.replaceAll('_', ' ');
+  return spaced
+      .split(' ')
+      .map(
+        (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
+      )
+      .join(' ');
 }
 
 /// One foreground span inside a usage summary period.

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
 import '../models/ride_booking.dart';
+import '../core/utils/uuid.dart';
 import 'supabase_config.dart';
 
 class CustomerRepository {
@@ -430,5 +431,53 @@ class CustomerRepository {
       },
     );
     return BookingRecord.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  /// Foreground-usage tracking config (heartbeat/timeout seconds).
+  /// Falls back to client defaults when offline. Same tunables the driver
+  /// app uses — the dashboard shows states for both roles consistently.
+  Future<Map<String, int>> fetchActivityConfig() async {
+    final raw = await _client.rpc('get_driver_activity_config');
+    final map = Map<String, dynamic>.from(raw as Map);
+    return {
+      'heartbeat_seconds': (map['heartbeat_seconds'] as num?)?.toInt() ?? 30,
+      'timeout_seconds': (map['timeout_seconds'] as num?)?.toInt() ?? 120,
+    };
+  }
+
+  /// Reports one foreground-activity event. Identity comes from the
+  /// authenticated session server-side; heartbeats are idempotent via
+  /// [heartbeatId].
+  Future<Map<String, dynamic>> reportActivity({
+    required String sessionId,
+    required String event,
+    String? heartbeatId,
+    String? endReason,
+  }) async {
+    final raw = await _client.rpc(
+      'report_commuter_activity',
+      params: {
+        'p_session_id': sessionId,
+        'p_event': event,
+        'p_heartbeat_id': heartbeatId,
+        'p_end_reason': endReason,
+      },
+    );
+    return Map<String, dynamic>.from(raw as Map);
+  }
+
+  /// Reports one audit entry (screen open / key action).
+  /// Identity + role are resolved server-side from the authenticated
+  /// session; the id is client-generated so retries are idempotent.
+  /// [detail] stays to small id/name labels (max 500 chars server-side).
+  Future<void> reportAudit({
+    required String action,
+    Map<String, String>? detail,
+  }) async {
+    await _client.rpc('report_user_audit_log', params: {
+      'p_log_id': generateUuidV4(),
+      'p_action': action,
+      'p_detail': (detail == null || detail.isEmpty) ? null : detail,
+    });
   }
 }
